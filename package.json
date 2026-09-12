@@ -1,0 +1,37 @@
+{
+  "name": "@hwain-hwang/sentinel-ts",
+  "version": "0.1.0-dev.1",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./coverage": "./dist/coverage.js",
+    "./crap": "./dist/crap.js",
+    "./evidence": "./dist/evidence/contract.js",
+    "./history": "./dist/history.js",
+    "./mutation": "./dist/mutation/index.js"
+  },
+  "engines": {
+    "node": "22.23.1"
+  },
+  "scripts": {
+    "build": "./scripts/node.sh --tool tsc -- -p tsconfig.json",
+    "prepack": "./scripts/node.sh --tool tsc -- -p tsconfig.json",
+    "self-crap": "./scripts/self-crap.sh",
+    "test": "./scripts/node.sh --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@typescript/old": "npm:typescript@6.0.3",
+    "koffi": "3.1.6"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@types/node": "22.20.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@vitest/coverage-v8": "4.1.11",
+    "vitest": "4.1.11"
+  }
+}

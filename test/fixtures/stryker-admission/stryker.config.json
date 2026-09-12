@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "allowConsoleColors": false,
+  "coverageAnalysis": "perTest",
+  "disableTypeChecks": false,
+  "fileLogLevel": "off",
+  "ignorePatterns": [
+    "**",
+    "!test/fixtures/stryker-admission/value.js",
+    "!test/fixtures/stryker-admission/value.test.js",
+    "!test/fixtures/stryker-admission/vitest.config.js"
+  ],
+  "force": true,
+  "ignoreStatic": false,
+  "inPlace": false,
+  "incremental": false,
+  "logLevel": "off",
+  "mutate": ["test/fixtures/stryker-admission/value.js"],
+  "mutator": {
+    "excludedMutations": [],
+    "plugins": null
+  },
+  "plugins": [
+    "@stryker-mutator/vitest-runner",
+    "./dist/mutation/stryker-event-reporter.js"
+  ],
+  "reporters": ["sentinel-plan"],
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "test/fixtures/stryker-admission/vitest.config.js",
+    "related": false
+  }
+}

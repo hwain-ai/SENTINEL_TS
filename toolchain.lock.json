@@ -1,5 +1,48 @@
 {
   "repository": "SENTINEL_TS",
-  "status": "bootstrap-pending",
-  "toolchains": {}
+  "status": "locked",
+  "toolchains": {
+    "node": {
+      "status": "locked",
+      "version": "22.23.1",
+      "npmVersion": "10.9.8",
+      "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-linux-x64.tar.xz",
+      "archiveSize": 31068444,
+      "archiveSha256": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
+      "archiveRoot": "node-v22.23.1-linux-x64",
+      "installDirectory": "node-v22.23.1-linux-x64",
+      "binarySha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+      "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "versionOutput": "v22.23.1",
+      "npmVersionOutput": "10.9.8",
+      "installedTreeSha256": "613bf801db61a3ef31251e06d1d655331925284229deb48952b9aac06dc43cdc",
+      "dependencyTreeSha256": "c6ca93f422d06fba30dc3834c13144cc385ca0c788f7655d672348a624c3f13b",
+      "packageLockSha256": "d7c183a727169778d3a7fa0fe0d03cbb56794a94502bac9867e1fb26c5a446e5",
+      "tscEntrySha256": "cbdfbf11c26ed00dfc073155e316a42d6d6d8a387be61006b82fa9aa93ac572e",
+      "tscBinarySha256": "4f2de678286401759b3fb4475bafe35b8f32b4b3a07d92642bbf37eadc9b34a4",
+      "emptyConfigSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "packageTools": {
+        "stryker": {
+          "status": "locked",
+          "package": "@stryker-mutator/core",
+          "version": "10.0.0",
+          "integrity": "sha512-ZvMsRyaXQQ5e6Thcid9pkuODv6Fn9E3nrBQJUap+hcJuGJ4unm26afo3m6YKSjn8kinyxJ/3TXf0cTWRDaTxVw==",
+          "runnerPackage": "@stryker-mutator/vitest-runner",
+          "runnerVersion": "10.0.0",
+          "runnerIntegrity": "sha512-SHK2/vfvRUpiz7jXPnQMBnr6zLdm69DK03Mo5mPhaZWcRSygrKUqYsPqWsXsK+5ySHzlMTfCyFK5NQ/X9sJFFw==",
+          "entry": "node_modules/@stryker-mutator/core/bin/stryker.js",
+          "entrySha256": "68ff1362368a0cf3d26c4b76955667dff7bf08baffc68d2ffd9bdd0cf6dbbd89"
+        }
+      },
+      "firstPartyTools": {
+        "sentinel-ts": {
+          "status": "locked",
+          "entry": "dist/cli.js",
+          "entrySha256": "fdf78498c03fb6b5d3e1bb8c09da321192c01cd8866637b4b2659a4a683aad44",
+          "tree": "dist",
+          "treeSha256": "74d4e826341bb6c6b02e327d4f6722d016f8bd2b782e15b1892219bac1861739"
+        }
+      }
+    }
+  }
 }

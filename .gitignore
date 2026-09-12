@@ -1,1 +1,7 @@
 .toolchain/
+.sentinel-ts/
+.sentinel-self-cache/
+.sentinel-self-coverage/
+.stryker-tmp/
+dist/
+node_modules/
