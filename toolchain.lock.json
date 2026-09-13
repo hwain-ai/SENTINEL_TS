@@ -57,10 +57,10 @@
           "binarySha256": "d8fa08f79c8198c5a5ccc9faa5a69803052703fc9513f99e7200e0ab42e1d799",
           "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
           "installedTreeSha256": "43b73cd747cf01b98ecbe920d23316d249f08808db025bcde5fdefaaf6987a7c",
-          "dependencyTreeSha256": "pending",
+          "dependencyTreeSha256": "31bbb8f4eb911d8188088371e8032247ac09d41de1bf85cea79bed987d2252ba",
           "tscBinaryPath": "node_modules/@typescript/typescript-linux-arm64/lib/tsc",
-          "tscBinarySha256": "pending",
-          "platformStatus": "pending"
+          "tscBinarySha256": "f86e8070c267b12d6c119bf567cb82d8b245e9d93da1864bc7c603cea10a8b2f",
+          "platformStatus": "locked"
         },
         "darwin-x86_64": {
           "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-darwin-x64.tar.xz",
@@ -71,10 +71,10 @@
           "binarySha256": "03afb3618a2685335209c93f8c34633f8316dbe6cc32196bc19daa1a73852e5b",
           "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
           "installedTreeSha256": "a4e311e0257a2c0e439efd02805878bba312c945bf77d4815a90c94261e679d0",
-          "dependencyTreeSha256": "pending",
+          "dependencyTreeSha256": "4fe5d622d1863412ac049e3b3f461f59710511e1f5de046e9406e0729306984a",
           "tscBinaryPath": "node_modules/@typescript/typescript-darwin-x64/lib/tsc",
-          "tscBinarySha256": "pending",
-          "platformStatus": "pending"
+          "tscBinarySha256": "76e4987d060ef8207875a53a73619ce665ff16fb2800c0d57a452e21c829bd7b",
+          "platformStatus": "locked"
         },
         "darwin-aarch64": {
           "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-darwin-arm64.tar.xz",
@@ -85,10 +85,10 @@
           "binarySha256": "2e3f1286a7eb3736346ed1803e458a0ff909e2b2d5bc746144dcb76970e9b99d",
           "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
           "installedTreeSha256": "5977dc9178d200500b7788f04379056f8c002e53604d5f883c4e6459d0a4874d",
-          "dependencyTreeSha256": "pending",
+          "dependencyTreeSha256": "e4acd1cdd19a06d1f57cab4bc13891ec14219b397550ca29425633527d9b6fb9",
           "tscBinaryPath": "node_modules/@typescript/typescript-darwin-arm64/lib/tsc",
-          "tscBinarySha256": "pending",
-          "platformStatus": "pending"
+          "tscBinarySha256": "a82f731365ad69d5c4c15f5e18fba4584bf3b7b839960172a76c3462b5114bf2",
+          "platformStatus": "locked"
         }
       }
     }
