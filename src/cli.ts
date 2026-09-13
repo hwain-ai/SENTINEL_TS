@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -628,7 +629,8 @@ export async function runCli(
   }
 }
 
+// macOS temp and home paths sit behind symlinks (/var, /tmp); compare real paths so the CLI still runs.
 const invokedPath = process.argv[1];
-if (invokedPath !== undefined && fileURLToPath(import.meta.url) === path.resolve(invokedPath)) {
+if (invokedPath !== undefined && fileURLToPath(import.meta.url) === realpathSync(path.resolve(invokedPath))) {
   process.exitCode = await runCli(process.argv.slice(2));
 }

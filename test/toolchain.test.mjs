@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -323,9 +324,9 @@ test("runs the first-party CLI only from the exact locked dist tree", async () =
   assert.deepEqual(lock.toolchains.node.firstPartyTools["sentinel-ts"], {
     status: "locked",
     entry: "dist/cli.js",
-    entrySha256: "4d7b51cc09786d500a4e61282509c928b0b513c506f41e31df64d678d725ae85",
+    entrySha256: "8ca852af69c5e5b1af9c4a423279fa3497d097a2b3afdb7e67cb07ced356a93c",
     tree: "dist",
-    treeSha256: "ab86a01f4e20588d48acff33dc6dbccb31d98195b754a20b8152d14e6ad50876",
+    treeSha256: "a9b4fb337d66263b0d363aaefccbffad7f6d092fc6aa81fa1ac2ae7c5ec668a4",
   });
 
   const help = run(join(repositoryRoot, "scripts", "node.sh"), [
@@ -367,7 +368,7 @@ test("removes hostile runtime, loader, proxy, and npm configuration variables", 
   );
 
   assert.equal(probe.status, 0, probe.stderr);
-  assert.equal(run("/usr/bin/test", ["!", "-e", canary]).status, 0);
+  assert.equal(existsSync(canary), false);
 });
 
 test("rejects arbitrary Node evaluation before Node starts", async () => {
@@ -380,7 +381,7 @@ test("rejects arbitrary Node evaluation before Node starts", async () => {
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unsupported Node mode/u);
-  assert.equal(run("/usr/bin/test", ["!", "-e", canary]).status, 0);
+  assert.equal(existsSync(canary), false);
 });
 
 test("rejects a pending lock before any selected Node process starts", async () => {
@@ -402,7 +403,7 @@ test("rejects a pending lock before any selected Node process starts", async () 
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /toolchain is pending/u);
-  assert.equal(run("/usr/bin/test", ["!", "-e", canary]).status, 0);
+  assert.equal(existsSync(canary), false);
 });
 
 test("rejects duplicate lock keys and installed-tree symlink escapes", async () => {
@@ -467,7 +468,7 @@ test("rejects a malformed archive URL without a Python traceback", async () => {
   for (const malformedHost of ["nodejs.org:not-a-port", "[nodejs.org"]) {
     const fixture = await copyLauncherRepository();
     const lockPath = join(fixture, "toolchain.lock.json");
-    const lock = (await readFile(lockPath, "utf8")).replace(
+    const lock = (await readFile(lockPath, "utf8")).replaceAll(
       "https://nodejs.org/download/",
       `https://${malformedHost}/download/`,
     );
@@ -549,7 +550,7 @@ test("creates dependency lock updates outside the installed dependency tree", as
   ], { cwd: fixture });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(run("/usr/bin/test", ["!", "-e", join(fixture, "node_modules", "npm-ran-here")]).status, 0);
+  assert.equal(existsSync(join(fixture, "node_modules", "npm-ran-here")), false);
   const packageDocument = JSON.parse(await readFile(join(fixture, "package.json"), "utf8"));
   const lockDocument = JSON.parse(await readFile(join(fixture, "package-lock.json"), "utf8"));
   assert.equal(packageDocument.devDependencies.demo, "1.2.3");
@@ -572,7 +573,7 @@ test("rejects a changed package lock before npm starts", async () => {
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /package-lock\.json checksum mismatch/u);
-  assert.equal(run("/usr/bin/test", ["!", "-e", canary]).status, 0);
+  assert.equal(existsSync(canary), false);
 });
 
 test("requires an explicit separator and known name for package tools", async () => {

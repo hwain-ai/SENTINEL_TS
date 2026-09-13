@@ -112,11 +112,16 @@ function nativeFcntl(): Fcntl {
   if (fcntlFunction !== null) return fcntlFunction;
   try {
     const libc = koffi.load(ABI.library);
-    fcntlFunction = libc.func(
-      "fcntl",
-      "int",
-      ["int", "int", koffi.inout(koffi.pointer(Flock))],
-    ) as Fcntl;
+    // fcntl is variadic; Apple arm64 passes variadic arguments on the stack, so the
+    // declaration must say so and the lock pointer travels as a typed variadic argument.
+    const variadic = libc.func("fcntl", "int", ["int", "int", "..."]) as (
+      descriptor: number,
+      command: number,
+      type: unknown,
+      lock: FlockValue,
+    ) => number;
+    const lockPointer = koffi.inout(koffi.pointer(Flock));
+    fcntlFunction = (descriptor, command, lock) => variadic(descriptor, command, lockPointer, lock);
     return fcntlFunction;
   } catch {
     throw new EvidenceContractError("commitLockUnsupported");

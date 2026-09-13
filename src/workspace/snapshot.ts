@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   stat,
 } from "node:fs/promises";
@@ -170,7 +171,8 @@ export async function withProjectSnapshot<T>(
   action: (snapshot: ProjectSnapshot) => Promise<T>,
 ): Promise<T> {
   const original = await protectedInventory(project);
-  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "sentinel-ts-snapshot-"));
+  // Vitest and Stryker report real paths; a snapshot under a symlinked temp root (macOS /var) must match them.
+  const temporaryRoot = await realpath(await mkdtemp(path.join(tmpdir(), "sentinel-ts-snapshot-")));
   await chmod(temporaryRoot, 0o700);
   const snapshotRoot = path.join(temporaryRoot, "project");
   try {
