@@ -25,9 +25,13 @@ import sys
 # The launcher may run under any interpreter; callers pass -I -B so no bytecode lands anywhere.
 sys.dont_write_bytecode = True
 
+import os  # noqa: E402
+
+# Everything the launcher creates or lets a child create is private, as the shell launchers had it.
+os.umask(0o077)
+
 import hashlib  # noqa: E402
 import json  # noqa: E402
-import os  # noqa: E402
 import platform as platform_module  # noqa: E402
 import re  # noqa: E402
 import shutil  # noqa: E402
