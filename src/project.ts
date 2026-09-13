@@ -15,18 +15,23 @@ const SKIPPED_DIRECTORIES = new Set([
   "node_modules",
   "reports",
 ]);
-const VITEST_CONFIG_NAMES = [
+// Vitest reads vitest.config.* first and falls back to vite.config.*; both spellings are accepted.
+const VITEST_OWN_CONFIG_NAMES = [
   "vitest.config.js",
   "vitest.config.mjs",
   "vitest.config.ts",
   "vitest.config.mts",
 ] as const;
+const VITE_CONFIG_NAMES = ["vite.config.js", "vite.config.mjs", "vite.config.ts", "vite.config.mts"] as const;
+const VITEST_CONFIG_NAMES = [...VITEST_OWN_CONFIG_NAMES, ...VITE_CONFIG_NAMES] as const;
 
 interface RawModule {
   readonly id: string;
   readonly language: "typescript";
   readonly root: string;
   readonly production: readonly string[];
+  // Module-relative globs for TypeScript files that are neither production nor tests (build or docs config).
+  readonly excluded: readonly string[];
   readonly testRoots: readonly string[];
   readonly testPatterns: readonly string[];
 }
@@ -37,7 +42,8 @@ export interface MutationProject {
   readonly moduleId: string;
   readonly productionFiles: readonly string[];
   readonly testFiles: readonly string[];
-  readonly vitestConfigFile: string;
+  // null when the module has no Vitest config file, so Vitest runs with its defaults.
+  readonly vitestConfigFile: string | null;
   readonly protectedFiles: readonly string[];
   readonly snapshotFiles: readonly string[];
 }
@@ -110,7 +116,7 @@ function rawModule(value: unknown): RawModule {
   const module = requireObject(value, "projectConfigShapeInvalid", "project module");
   exactKeys(
     module,
-    ["id", "language", "root", "production", "testCommand", "coverage", "testRoots", "testPatterns"],
+    ["id", "language", "root", "production", "testCommand", "coverage", "testRoots", "testPatterns", "excluded"],
     "project module",
   );
   validateCommand(module.testCommand, "test command");
@@ -121,6 +127,8 @@ function rawModule(value: unknown): RawModule {
     root: canonicalRelative(requiredText(module.root, "module root"), "module root"),
     production: textList(module.production, "production patterns").map((item) =>
       canonicalRelative(item, "production pattern", true)),
+    excluded: module.excluded === undefined ? [] : textList(module.excluded, "excluded patterns").map((item) =>
+      canonicalRelative(item, "excluded pattern", true)),
     testRoots: textList(module.testRoots, "test roots").map((item) =>
       canonicalRelative(item, "test root")),
     testPatterns: textList(module.testPatterns, "test patterns").map((item) => {
@@ -273,7 +281,7 @@ function classifySources(files: readonly string[], module: RawModule): {
   readonly production: readonly string[];
   readonly tests: readonly string[];
 } {
-  const sources = files.filter(isSourceFile);
+  const sources = files.filter(isSourceFile).filter((file) => !matchesAny(file, module.excluded));
   const production = sources.filter((file) => matchesAny(file, module.production));
   const tests = sources.filter((file) =>
     module.testRoots.some((root) => underRoot(file, root)) &&
@@ -295,15 +303,18 @@ function classifySources(files: readonly string[], module: RawModule): {
   return { production, tests };
 }
 
-async function oneVitestConfig(moduleRoot: string): Promise<string> {
-  const matches: string[] = [];
-  for (const name of VITEST_CONFIG_NAMES) {
-    if (await vitestConfigExists(moduleRoot, name)) matches.push(name);
+async function oneVitestConfig(moduleRoot: string): Promise<string | null> {
+  for (const names of [VITEST_OWN_CONFIG_NAMES, VITE_CONFIG_NAMES]) {
+    const matches: string[] = [];
+    for (const name of names) {
+      if (await vitestConfigExists(moduleRoot, name)) matches.push(name);
+    }
+    if (matches.length > 1) {
+      throw new MutationProtocolError("vitestConfigAmbiguous", "exactly one supported Vitest config is required");
+    }
+    if (matches.length === 1) return matches[0] as string;
   }
-  if (matches.length !== 1) {
-    throw new MutationProtocolError("vitestConfigAmbiguous", "exactly one supported Vitest config is required");
-  }
-  return matches[0] as string;
+  return null;
 }
 
 function isMissing(error: unknown): boolean {
@@ -363,7 +374,8 @@ export async function loadMutationProject(
   const scope = classifySources(files, module);
   const vitestConfigFile = await oneVitestConfig(moduleRoot);
   await rejectMutationDirectives(moduleRoot, scope.production);
-  const protectedFiles = [...new Set([...scope.production, ...scope.tests, vitestConfigFile])].sort(compareUtf8);
+  const configFiles = vitestConfigFile === null ? [] : [vitestConfigFile];
+  const protectedFiles = [...new Set([...scope.production, ...scope.tests, ...configFiles])].sort(compareUtf8);
   return {
     projectRoot,
     moduleRoot,

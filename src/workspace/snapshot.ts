@@ -43,7 +43,7 @@ export interface ProjectSnapshot {
   readonly root: string;
   readonly productionFiles: readonly string[];
   readonly testFiles: readonly string[];
-  readonly vitestConfigFile: string;
+  readonly vitestConfigFile: string | null;
   readonly snapshotFiles: readonly string[];
 }
 

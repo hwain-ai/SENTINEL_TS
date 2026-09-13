@@ -50,6 +50,8 @@ async function writeProject() {
     "utf8",
   );
   await writeFile(join(project, "package.json"), '{"type":"module"}\n', "utf8");
+  // A real project carries a tsconfig; Stryker must not try to rewrite it inside the sandbox.
+  await writeFile(join(project, "tsconfig.json"), '{"compilerOptions":{"strict":true}}\n', "utf8");
   await writeFile(
     join(project, "sentinel.config.json"),
     `${JSON.stringify({

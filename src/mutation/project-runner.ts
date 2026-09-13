@@ -108,7 +108,10 @@ async function executableConfig(snapshot: ProjectSnapshot, root: string): Promis
     testFiles: [...snapshot.testFiles],
     testRunner: "sentinel-vitest",
     thresholds: { high: 100, low: 100, break: null },
-    vitest: { configFile: snapshot.vitestConfigFile, related: false },
+    // The snapshot carries the project's tsconfig files verbatim, so Stryker's tsconfig rewrite
+    // (which needs the typescript package the locked tree does not carry) is pointed at no file.
+    tsconfigFile: ".sentinel-runtime/tsconfig.none.json",
+    vitest: { ...base.vitest, related: false },
   };
   const runtime = path.join(snapshot.root, ".sentinel-runtime");
   await mkdir(runtime, { mode: 0o700 });

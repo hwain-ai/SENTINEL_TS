@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { link, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -82,6 +82,48 @@ test("rejects a production glob that leaves another TypeScript source unclassifi
     () => loadMutationProject(project),
     (error) => error?.code === "unclassifiedSource",
   );
+});
+
+test("accepts a vite.config file as the Vitest config and prefers vitest.config when both exist", async () => {
+  const project = await baseProject("vite.config.ts");
+  await writeConfig(project, [typescriptModule()]);
+
+  const viteOnly = await loadMutationProject(project);
+  assert.equal(viteOnly.vitestConfigFile, "vite.config.ts");
+  assert.deepEqual(viteOnly.productionFiles, ["src/value.ts"]);
+
+  await writeFile(join(project, "vitest.config.mjs"), "export default {};\n", "utf8");
+  const both = await loadMutationProject(project);
+  assert.equal(both.vitestConfigFile, "vitest.config.mjs");
+});
+
+test("loads a module without any Vitest config and protects only its sources", async () => {
+  const project = await baseProject();
+  await rm(join(project, "vitest.config.mjs"));
+  await writeConfig(project, [typescriptModule()]);
+
+  const loaded = await loadMutationProject(project);
+
+  assert.equal(loaded.vitestConfigFile, null);
+  assert.deepEqual(loaded.protectedFiles, ["src/value.ts", "test/value.test.ts"]);
+});
+
+test("an excluded glob declares a TypeScript source as neither production nor test", async () => {
+  const project = await baseProject();
+  await writeFile(join(project, "build.config.ts"), "export default {};\n", "utf8");
+  const module = typescriptModule();
+  await writeConfig(project, [module]);
+  await assert.rejects(
+    () => loadMutationProject(project),
+    (error) => error?.code === "unclassifiedSource",
+  );
+
+  module.excluded = ["build.config.ts"];
+  await writeConfig(project, [module]);
+  const loaded = await loadMutationProject(project);
+
+  assert.deepEqual(loaded.productionFiles, ["src/value.ts"]);
+  assert.ok(!loaded.protectedFiles.includes("build.config.ts"));
 });
 
 test("checks original protected identity even when snapshot execution throws", async () => {

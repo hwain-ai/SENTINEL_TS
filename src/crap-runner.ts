@@ -41,8 +41,7 @@ function runVitest(vitest: string, snapshot: ProjectSnapshot): Promise<number | 
   const argv = [
     vitest,
     "run",
-    "--config",
-    snapshot.vitestConfigFile,
+    ...(snapshot.vitestConfigFile === null ? [] : ["--config", snapshot.vitestConfigFile]),
     "--coverage.enabled=true",
     "--coverage.provider=v8",
     "--coverage.reporter=json",
