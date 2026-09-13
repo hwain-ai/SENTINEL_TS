@@ -4,7 +4,7 @@
 
 SENTINEL_TS의 단일 책임은 TypeScript 프로젝트의 CRAP 계산과 mutation 결과를 하나의 품질 게이트로 판정하는 것입니다.
 
-원격 저장소는 github.com/hwain-hwang/SENTINEL_TS 입니다.
+원격 저장소는 github.com/hwain-ai/SENTINEL_TS 입니다.
 
 TypeScript·TSX source를 AST로 분석해 함수, method, getter, setter, constructor, 함수 표현식,
 arrow function과 TSX callback을 각각 찾습니다. `check --project`는 검사 대상의 사본에서 잠긴
@@ -40,4 +40,4 @@ AST 분석에는 npm alias로 exact 고정한 TypeScript 6.0.3 API를 직접 사
 
 ## 설계 근거
 
-원본 작업공간 설계 문서: [2026-08-native-quality-tools.md](https://github.com/hwain-hwang/SENTINEL/blob/main/docs/design-docs/2026-08-native-quality-tools.md) (SENTINEL 저장소)
+원본 작업공간 설계 문서: [2026-08-native-quality-tools.md](https://github.com/hwain-ai/SENTINEL/blob/main/docs/design-docs/2026-08-native-quality-tools.md) (SENTINEL 저장소)
