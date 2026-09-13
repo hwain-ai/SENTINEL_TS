@@ -1,4 +1,6 @@
-# TypeScript 검사기 자체 시험. sentinel-tool/setup.sh 가 잠금 파일의 주소·지문으로 Node 와 의존성을 받고 dist 를 빌드한다.
+# TypeScript 검사기 자체 시험을 지원 플랫폼 전부에서 돌린다. scripts/toolchain.py setup 이 잠금 파일의 해당 플랫폼 항목으로
+# Node·패키지·dist 빌드를 준비하고, 같은 실행기로 시험을 돌린다. 플랫폼별 의존성 지문이 아직 pending 이면 시험 대신
+# describe-dependencies 로 지문을 출력해 잠금 파일에 옮겨 적을 수 있게 한다.
 name: ci
 
 on:
@@ -9,7 +11,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +23,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .toolchain
-          key: ts-toolchain-${{ runner.os }}-${{ hashFiles('toolchain.lock.json', 'package-lock.json') }}
-      - name: Bootstrap the checker (locked Node, packages and dist build)
-        run: sentinel-tool/setup.sh
-      - name: Run the checker's tests
-        run: ./scripts/node.sh --test test/*.test.mjs
+          key: ts-toolchain-${{ matrix.os }}-${{ hashFiles('toolchain.lock.json', 'package-lock.json') }}
+      - name: Bootstrap the locked Node and install the locked packages
+        run: |
+          python3 -I -B scripts/toolchain.py bootstrap
+          python3 -I -B scripts/toolchain.py npm ci --offline || python3 -I -B scripts/toolchain.py npm ci
+      - name: Print dependency fingerprints for the lock (pending platforms only)
+        run: python3 -I -B scripts/toolchain.py describe-dependencies
+      - name: Build, doctor and run the checker's tests
+        run: |
+          python3 -I -B scripts/toolchain.py setup
+          python3 -I -B scripts/toolchain.py node --test test/*.test.mjs
