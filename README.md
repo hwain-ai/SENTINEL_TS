@@ -40,4 +40,4 @@ AST 분석에는 npm alias로 exact 고정한 TypeScript 6.0.3 API를 직접 사
 
 ## 설계 근거
 
-원본 작업공간 설계 문서: `docs/design-docs/2026-08-native-quality-tools.md`
+원본 작업공간 설계 문서: [2026-08-native-quality-tools.md](https://github.com/hwain-hwang/SENTINEL/blob/main/docs/design-docs/2026-08-native-quality-tools.md) (SENTINEL 저장소)

@@ -17,4 +17,5 @@ CRAP·Stryker 변이·증거 기록에 더해, `check --project`가 사본에서
 
 ## 운영 기록
 
+* [실제 프로젝트 검증 기록](sentinel-typescript-native-validation.md) - 설치 지문 대조, 공개 프로젝트 unjs/scule 검사와 직접 Stryker 대조, 남은 한계
 * [변경 기록](log.md) - 문서 번들의 생성과 변경 내역
