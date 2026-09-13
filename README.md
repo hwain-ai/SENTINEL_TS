@@ -4,12 +4,24 @@
 
 SENTINEL_TS의 단일 책임은 TypeScript 프로젝트의 CRAP 계산과 mutation 결과를 하나의 품질 게이트로 판정하는 것입니다.
 
-현재는 로컬 구현 단계이며 GitHub private remote는 아직 없습니다.
+원격 저장소는 github.com/hwain-hwang/SENTINEL_TS 입니다.
 
-첫 구현 범위에서는 TypeScript·TSX source를 AST로 분석해 함수, method, getter, setter,
-constructor, 함수 표현식, arrow function과 TSX callback을 각각 찾습니다. 실제 Istanbul
-`coverage-final.json`의 function·statement range를 같은 module과 source digest의 callable에만
-연결하고 CRAP을 exact 분수로 계산합니다. 전체 CLI, mutation과 history는 아직 구현 중입니다.
+TypeScript·TSX source를 AST로 분석해 함수, method, getter, setter, constructor, 함수 표현식,
+arrow function과 TSX callback을 각각 찾습니다. `check --project`는 검사 대상의 사본에서 잠긴
+Vitest로 coverage를 새로 만들고, Istanbul `coverage-final.json`의 function·statement range를 같은
+module과 source digest의 callable에만 연결해 CRAP을 exact 분수로 계산한 뒤, 같은 사본에서 Stryker
+변이 검사를 돌려 두 결과를 하나의 증거로 기록합니다. `--input`으로 미리 계산한 CRAP 행을 넘기는
+방식도 그대로 지원합니다.
+
+기준값은 `crap`, `mutation`, `check`의 `--crap-max`(CRAP 상한, 기본 8)와 `--mutation-min`(변이 최소
+kill 비율 %, 기본 100)으로 넘깁니다. 정수 또는 소수점 두 자리까지의 문자열이며 정확한 분수로 비교하고,
+증거 파일의 crap·mutation 구성요소에 판정에 쓴 crapMax·mutationMin을 함께 기록합니다.
+
+통합 SENTINEL 연결은 `sentinel-tool/` 폴더가 맡습니다. 어댑터가 도구 요청(표준입력 JSON)을 받아
+`check --project`를 실행하고 응답 JSON 하나만 표준출력에 쓰며, `sentinel setup --language typescript`가
+`sentinel-tool/setup.sh`로 Node·의존성·빌드를 준비한 뒤 이 어댑터를 묶음으로 설치합니다. 검사 대상
+프로젝트의 테스트는 이 검사기의 잠긴 node_modules(Vitest 4.1.11)로 실행되므로, 대상 프로젝트가 다른
+런타임 의존성을 쓰면 아직 검사할 수 없습니다.
 
 ## 현재 확인 방법
 

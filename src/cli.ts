@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { type CallableMetric } from "./coverage.js";
 import { computeCrap } from "./crap.js";
+import { collectProjectCrap, type ProjectCrapRun } from "./crap-runner.js";
+import { GateInputError, loadGate, type GateThresholds, type Threshold } from "./gate.js";
 import { EvidenceContractError } from "./evidence/contract.js";
 import {
   summarizeRepeatedFindings,
@@ -11,7 +14,7 @@ import {
   type Finding,
   type RunEvidenceDraft,
 } from "./history.js";
-import { loadMutationProject } from "./project.js";
+import { loadMutationProject, type MutationProject } from "./project.js";
 import { evaluateMutationGate, type MutationGateResult } from "./mutation/gate.js";
 import { normalizeMutationOutcome } from "./mutation/normalizer.js";
 import { collectProjectMutation } from "./mutation/project-runner.js";
@@ -45,6 +48,7 @@ interface CrapRowInput {
 interface CrapAnalysis {
   readonly pass: boolean;
   readonly rows: readonly (ReturnType<typeof computeCrap> & { readonly id: string })[];
+  readonly unknown: readonly string[];
 }
 
 interface MutationAnalysis {
@@ -126,7 +130,7 @@ function requiredOption(options: Readonly<Record<string, string | true>>, name: 
   return value;
 }
 
-function analyzeCrap(value: unknown): CrapAnalysis {
+function analyzeCrap(value: unknown, crapMax: Threshold): CrapAnalysis {
   const input = requireObject(value, "invalidCrapInput", "CRAP input");
   if (!Array.isArray(input.rows)) {
     throw new MutationProtocolError("invalidCrapInput", "CRAP input rows must be an array");
@@ -137,10 +141,23 @@ function analyzeCrap(value: unknown): CrapAnalysis {
     const id = requireMutationId(row.id, "CRAP row ID");
     if (seen.has(id)) throw new MutationProtocolError("duplicateCrapRowId", `duplicate CRAP row ID: ${id}`);
     seen.add(id);
-    return { id, ...computeCrap(row.complexity, row.covered, row.total) };
+    return { id, ...computeCrap(row.complexity, row.covered, row.total, crapMax) };
   });
   rows.sort((left, right) => Buffer.from(left.id).compare(Buffer.from(right.id)));
-  return { pass: rows.length > 0 && rows.every((row) => row.pass), rows };
+  return { pass: rows.length > 0 && rows.every((row) => row.pass), rows, unknown: [] };
+}
+
+function metricId(metric: CallableMetric): string {
+  return `${metric.modulePath}:${metric.callableId}`;
+}
+
+function projectCrapAnalysis(run: ProjectCrapRun): CrapAnalysis {
+  const rows = run.metrics
+    .filter((metric) => metric.crap !== null)
+    .map((metric) => ({ id: metricId(metric), ...(metric.crap as ReturnType<typeof computeCrap>) }));
+  const unknown = run.metrics.filter((metric) => metric.crap === null).map(metricId);
+  rows.sort((left, right) => Buffer.from(left.id).compare(Buffer.from(right.id)));
+  return { pass: rows.length > 0 && unknown.length === 0 && rows.every((row) => row.pass), rows, unknown };
 }
 
 function parseProof(value: unknown): TypedKillProof {
@@ -166,7 +183,7 @@ function parseProof(value: unknown): TypedKillProof {
   return proof as unknown as TypedKillProof;
 }
 
-function analyzeMutation(value: unknown): MutationAnalysis {
+function analyzeMutation(value: unknown, mutationMin: Threshold): MutationAnalysis {
   const input = requireObject(value, "invalidMutationInput", "mutation input");
   if (!Array.isArray(input.streamedResults) || !Array.isArray(input.proofs)) {
     throw new MutationProtocolError(
@@ -180,13 +197,14 @@ function analyzeMutation(value: unknown): MutationAnalysis {
   reporter.onMutationTestReportReady(input.finalReport, {});
   const run = reporter.finalize();
 
-  return analyzeMutationRecord(run, input.proofs, input.unauthorizedExclusion);
+  return analyzeMutationRecord(run, input.proofs, input.unauthorizedExclusion, mutationMin);
 }
 
 function analyzeMutationRecord(
   run: MutationRunRecord,
   rawProofs: unknown,
   unauthorizedExclusion: unknown,
+  mutationMin: Threshold,
 ): MutationAnalysis {
   if (!Array.isArray(rawProofs)) {
     throw new MutationProtocolError("invalidMutationInput", "mutation proofs must be an array");
@@ -210,14 +228,14 @@ function analyzeMutationRecord(
       "mutation input must contain unauthorizedExclusion",
     );
   }
-  const gate = evaluateMutationGate(run.candidates, normalized, unauthorizedExclusion);
+  const gate = evaluateMutationGate(run.candidates, normalized, unauthorizedExclusion, mutationMin);
   return { run, normalized, gate };
 }
 
-async function analyzeProjectMutation(
+async function loadSelectedProject(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
-): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
+): Promise<{ readonly project: MutationProject; readonly projectRoot: string }> {
   const selectedProject = requiredOption(options, "--project");
   const projectRoot = path.resolve(dependencies.cwd, selectedProject);
   const config = options["--config"];
@@ -227,11 +245,29 @@ async function analyzeProjectMutation(
     typeof config === "string" ? config : undefined,
     typeof module === "string" ? module : undefined,
   );
+  return { project, projectRoot };
+}
+
+async function analyzeProjectMutation(
+  options: Readonly<Record<string, string | true>>,
+  dependencies: CliDependencies,
+  mutationMin: Threshold,
+): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
+  const { project, projectRoot } = await loadSelectedProject(options, dependencies);
   const collected = await collectProjectMutation(project);
   return {
-    analysis: analyzeMutationRecord(collected.run, collected.proofs, 0),
+    analysis: analyzeMutationRecord(collected.run, collected.proofs, 0, mutationMin),
     projectRoot,
   };
+}
+
+function gateOptions(options: Readonly<Record<string, string | true>>): GateThresholds {
+  const crapMax = options["--crap-max"];
+  const mutationMin = options["--mutation-min"];
+  return loadGate(
+    typeof crapMax === "string" ? crapMax : undefined,
+    typeof mutationMin === "string" ? mutationMin : undefined,
+  );
 }
 
 function mutationFindings(analysis: MutationAnalysis): readonly Finding[] {
@@ -245,13 +281,11 @@ function mutationFindings(analysis: MutationAnalysis): readonly Finding[] {
 }
 
 function crapFindings(analysis: CrapAnalysis): readonly Finding[] {
-  return analysis.rows
+  const exceeded = analysis.rows
     .filter((row) => !row.pass)
-    .map((row) => ({
-      kind: "crap" as const,
-      subject: row.id,
-      state: "crapAbove8",
-    }));
+    .map((row) => ({ kind: "crap" as const, subject: row.id, state: "crapAboveLimit" }));
+  const unknown = analysis.unknown.map((id) => ({ kind: "crap" as const, subject: id, state: "coverageUnknown" }));
+  return [...exceeded, ...unknown];
 }
 
 function compareCrapRisk(
@@ -264,27 +298,37 @@ function compareCrapRisk(
   return leftScaled > rightScaled ? 1 : -1;
 }
 
-function evidenceCrapComponent(analysis: CrapAnalysis): Readonly<Record<string, unknown>> {
+function evidenceCrapComponent(analysis: CrapAnalysis, crapMax: Threshold): Readonly<Record<string, unknown>> {
+  const callableCount = analysis.rows.length + analysis.unknown.length;
   if (analysis.rows.length === 0) {
-    return { callableCount: 0, maxNumerator: "0", maxDenominator: "1", pass: false, unknownCount: 0 };
+    return {
+      callableCount,
+      crapMax: crapMax.text,
+      maxNumerator: "0",
+      maxDenominator: "1",
+      pass: false,
+      unknownCount: analysis.unknown.length,
+    };
   }
   let maximum = analysis.rows[0]!;
   for (const row of analysis.rows.slice(1)) {
     if (compareCrapRisk(row, maximum) > 0) maximum = row;
   }
   return {
-    callableCount: analysis.rows.length,
+    callableCount,
+    crapMax: crapMax.text,
     maxNumerator: maximum.numerator,
     maxDenominator: maximum.denominator,
     pass: analysis.pass,
-    unknownCount: 0,
+    unknownCount: analysis.unknown.length,
   };
 }
 
-function evidenceMutationComponent(analysis: MutationAnalysis): Readonly<Record<string, unknown>> {
+function evidenceMutationComponent(analysis: MutationAnalysis, mutationMin: Threshold): Readonly<Record<string, unknown>> {
   return {
     ...analysis.gate.counts,
     inScope: analysis.gate.inScope,
+    mutationMin: mutationMin.text,
     pass: analysis.gate.pass,
     unauthorizedExclusion: analysis.gate.unauthorizedExclusion,
   };
@@ -367,85 +411,125 @@ async function runHistory(arguments_: readonly string[], dependencies: CliDepend
   return 0;
 }
 
+async function crapExecution(
+  options: Readonly<Record<string, string | true>>,
+  dependencies: CliDependencies,
+  crapMax: Threshold,
+): Promise<CrapAnalysis> {
+  const input = options["--input"];
+  if (typeof input === "string") return analyzeCrap(await readJson(input, dependencies.cwd), crapMax);
+  const { project } = await loadSelectedProject(options, dependencies);
+  return projectCrapAnalysis(await collectProjectCrap(project, crapMax));
+}
+
 async function runCrap(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input"]);
-  const analysis = analyzeCrap(await readJson(requiredOption(options, "--input"), dependencies.cwd));
-  writeJson(dependencies.writeOut, analysis);
+  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--crap-max"]);
+  const gate = gateOptions(options);
+  const analysis = await crapExecution(options, dependencies, gate.crapMax);
+  writeJson(dependencies.writeOut, { ...analysis, crapMax: gate.crapMax.text });
   return analysis.pass ? 0 : 2;
 }
 
 async function mutationExecution(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
+  mutationMin: Threshold,
 ): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
   const input = options["--input"];
-  if (typeof input !== "string") return analyzeProjectMutation(options, dependencies);
+  if (typeof input !== "string") return analyzeProjectMutation(options, dependencies, mutationMin);
   return {
-    analysis: analyzeMutation(await readJson(input, dependencies.cwd)),
+    analysis: analyzeMutation(await readJson(input, dependencies.cwd), mutationMin),
     projectRoot: requiredOption(options, "--project"),
   };
 }
 
 async function runMutation(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module"]);
-  const execution = await mutationExecution(options, dependencies);
+  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--mutation-min"]);
+  const gate = gateOptions(options);
+  const execution = await mutationExecution(options, dependencies, gate.mutationMin);
   const analysis = execution.analysis;
   await record(
     "mutation",
     execution.projectRoot,
-    { mutation: evidenceMutationComponent(analysis) },
+    { mutation: evidenceMutationComponent(analysis, gate.mutationMin) },
     mutationFindings(analysis),
     dependencies,
   );
-  writeJson(dependencies.writeOut, { gate: analysis.gate, results: analysis.normalized });
+  writeJson(dependencies.writeOut, { gate: analysis.gate, mutationMin: gate.mutationMin.text, results: analysis.normalized });
   return analysis.gate.pass ? 0 : 2;
 }
 
-async function checkExecution(
-  input: Record<string, unknown>,
-  legacyInput: boolean,
+interface CheckExecution {
+  readonly crap: CrapAnalysis;
+  readonly mutation: MutationAnalysis;
+  readonly projectRoot: string;
+}
+
+async function inputCheckExecution(
+  inputPath: string,
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
-): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
-  if (!legacyInput) return analyzeProjectMutation(options, dependencies);
-  return {
-    analysis: analyzeMutation(input.mutation),
-    projectRoot: requiredOption(options, "--project"),
-  };
+  gate: GateThresholds,
+): Promise<CheckExecution> {
+  const input = requireObject(await readJson(inputPath, dependencies.cwd), "invalidCheckInput", "check input");
+  const legacyInput = "crap" in input || "mutation" in input;
+  const crap = analyzeCrap(legacyInput ? input.crap : input, gate.crapMax);
+  if (legacyInput) {
+    return { crap, mutation: analyzeMutation(input.mutation, gate.mutationMin), projectRoot: requiredOption(options, "--project") };
+  }
+  const execution = await analyzeProjectMutation(options, dependencies, gate.mutationMin);
+  return { crap, mutation: execution.analysis, projectRoot: execution.projectRoot };
+}
+
+// Without --input the whole check is native: fresh coverage CRAP and the project mutation run.
+async function projectCheckExecution(
+  options: Readonly<Record<string, string | true>>,
+  dependencies: CliDependencies,
+  gate: GateThresholds,
+): Promise<CheckExecution> {
+  const { project, projectRoot } = await loadSelectedProject(options, dependencies);
+  const crap = projectCrapAnalysis(await collectProjectCrap(project, gate.crapMax));
+  const collected = await collectProjectMutation(project);
+  const mutation = analyzeMutationRecord(collected.run, collected.proofs, 0, gate.mutationMin);
+  return { crap, mutation, projectRoot };
 }
 
 async function runCheck(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module"]);
-  const input = requireObject(
-    await readJson(requiredOption(options, "--input"), dependencies.cwd),
-    "invalidCheckInput",
-    "check input",
-  );
-  const legacyInput = "crap" in input || "mutation" in input;
-  const crap = analyzeCrap(legacyInput ? input.crap : input);
-  const execution = await checkExecution(input, legacyInput, options, dependencies);
-  const mutation = execution.analysis;
+  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--crap-max", "--mutation-min"]);
+  const gate = gateOptions(options);
+  const inputPath = options["--input"];
+  const execution = typeof inputPath === "string"
+    ? await inputCheckExecution(inputPath, options, dependencies, gate)
+    : await projectCheckExecution(options, dependencies, gate);
+  const { crap, mutation } = execution;
   const pass = crap.pass && mutation.gate.pass;
   await record(
     "check",
     execution.projectRoot,
     {
-      crap: evidenceCrapComponent(crap),
-      mutation: evidenceMutationComponent(mutation),
+      crap: evidenceCrapComponent(crap, gate.crapMax),
+      mutation: evidenceMutationComponent(mutation, gate.mutationMin),
     },
     [...crapFindings(crap), ...mutationFindings(mutation)],
     dependencies,
   );
-  writeJson(dependencies.writeOut, { pass, crap, mutation: { gate: mutation.gate, results: mutation.normalized } });
+  writeJson(dependencies.writeOut, {
+    pass,
+    gate: { crapMax: gate.crapMax.text, mutationMin: gate.mutationMin.text },
+    crap,
+    mutation: { gate: mutation.gate, results: mutation.normalized },
+  });
   return pass ? 0 : 2;
 }
 
 function writeCliFailure(error: unknown, dependencies: CliDependencies): number {
   const protocolError = error instanceof MutationProtocolError;
   const evidenceError = error instanceof EvidenceContractError;
-  const code = protocolError || evidenceError ? error.code : "internalError";
+  const gateError = error instanceof GateInputError;
+  const code = protocolError || evidenceError || gateError ? error.code : "internalError";
   const message = error instanceof Error ? error.message : String(error);
   writeJson(dependencies.writeError, { error: { code, message } });
+  if (gateError) return 3;
   if (code === "strykerRuntimeUnavailable") return 5;
   return protocolError ? 6 : 7;
 }

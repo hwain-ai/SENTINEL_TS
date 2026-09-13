@@ -3,6 +3,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { MutationProtocolError } from "../mutation/protocol.js";
 import { parseProjectConfigJson } from "../project-json.js";
 
+import { GateInputError, crapPasses, killRatePasses, parseCrapMax, parseMutationMin, type Threshold } from "../gate.js";
+
 const MAX_SAFE_INTEGER_TEXT = "9007199254740991";
 const MAX_UINT64 = 18_446_744_073_709_551_615n;
 const PROJECT_STATE_FIELDS = [
@@ -39,7 +41,7 @@ const EVIDENCE_BODY_FIELDS = [
   "startedSha256",
   "terminalStatus",
 ] as const;
-const CRAP_FIELDS = ["callableCount", "maxDenominator", "maxNumerator", "pass", "unknownCount"] as const;
+const CRAP_FIELDS = ["callableCount", "crapMax", "maxDenominator", "maxNumerator", "pass", "unknownCount"] as const;
 const MUTATION_STATES = [
   "killed",
   "survived",
@@ -51,7 +53,7 @@ const MUTATION_STATES = [
   "ignored",
   "toolError",
 ] as const;
-const MUTATION_FIELDS = [...MUTATION_STATES, "inScope", "pass", "unauthorizedExclusion"] as const;
+const MUTATION_FIELDS = [...MUTATION_STATES, "inScope", "mutationMin", "pass", "unauthorizedExclusion"] as const;
 const SEQUENCE_KEY_DOMAIN = Buffer.from("SENTINEL\0commit-sequence-key\0v1\0", "ascii");
 const SEQUENCE_MAC_DOMAIN = Buffer.from("SENTINEL\0commit-sequence\0v1\0", "ascii");
 const EVIDENCE_KEY_DOMAIN = Buffer.from("SENTINEL\0evidence-key\0v1\0", "ascii");
@@ -581,7 +583,8 @@ function validateCrapComponent(value: unknown): boolean {
   const denominator = decimalText(component.maxDenominator, false, 48, "crapComponentInvalid");
   requireReducedFraction(numerator, denominator);
   const [callableCount, unknownCount] = requireCrapInventory(component, numerator, denominator);
-  const expected = callableCount > 0 && unknownCount === 0 && numerator <= 8n * denominator;
+  const crapMax = threshold(component.crapMax, parseCrapMax, "crapComponentInvalid");
+  const expected = callableCount > 0 && unknownCount === 0 && crapPasses(numerator, denominator, crapMax);
   return requireCrapPass(component, expected);
 }
 
@@ -597,13 +600,23 @@ function validateMutationCounts(component: Record<string, unknown>): number {
   return total;
 }
 
+function threshold(value: unknown, parser: (text: unknown) => Threshold, code: string): Threshold {
+  try {
+    return parser(value);
+  } catch (error) {
+    if (error instanceof GateInputError) throw new EvidenceContractError(code);
+    throw error;
+  }
+}
+
+// At the default 100 percent this is exactly killed === inScope with every other state at zero.
 function mutationPassExpected(
   component: Record<string, unknown>,
   inScope: number,
   unauthorized: number,
 ): boolean {
-  const otherStatesEmpty = MUTATION_STATES.every((state) => state === "killed" || component[state] === 0);
-  return inScope > 0 && component.killed === inScope && unauthorized === 0 && otherStatesEmpty;
+  const mutationMin = threshold(component.mutationMin, parseMutationMin, "mutationComponentInvalid");
+  return inScope > 0 && unauthorized === 0 && killRatePasses(component.killed as number, inScope, mutationMin);
 }
 
 function validateMutationComponent(value: unknown): boolean {

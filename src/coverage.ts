@@ -8,6 +8,7 @@ import {
   renderCanonicalDecimal,
   type SourceRange,
 } from "./crap.js";
+import { DEFAULT_GATE, crapPasses, type Threshold } from "./gate.js";
 import {
   UnicodeScalarError,
   PathTextError,
@@ -614,7 +615,7 @@ function greatestCommonDivisor(left: bigint, right: bigint): bigint {
   return a;
 }
 
-function validateKnownCrap(metric: CallableMetric): void {
+function validateKnownCrap(metric: CallableMetric, crapMax: Threshold): void {
   if (metric.coverage === null || metric.unknownReason !== null || metric.crap === null) {
     throw new CallableIdentityError("crapRowStateInvalid", "known CRAP rows require coverage and no unknown reason");
   }
@@ -625,7 +626,7 @@ function validateKnownCrap(metric: CallableMetric): void {
   }
   if (
     metric.crap.decimal !== renderCanonicalDecimal(numerator, denominator) ||
-    metric.crap.pass !== (numerator <= 8n * denominator)
+    metric.crap.pass !== crapPasses(numerator, denominator, crapMax)
   ) {
     throw new CallableIdentityError("crapFractionInvalid", "CRAP decimal and gate must match the exact fraction");
   }
@@ -651,7 +652,7 @@ function validateUnknownCrap(metric: CallableMetric): void {
   }
 }
 
-function validateMetricForSort(metric: CallableMetric): void {
+function validateMetricForSort(metric: CallableMetric, crapMax: Threshold): void {
   requireCallableId(metric.callableId);
   normalizeModulePath(metric.modulePath);
   if (!Number.isSafeInteger(metric.sourceRange.startByte) || metric.sourceRange.startByte < 0) {
@@ -661,7 +662,7 @@ function validateMetricForSort(metric: CallableMetric): void {
     );
   }
   if (metric.crap === null) validateUnknownCrap(metric);
-  else validateKnownCrap(metric);
+  else validateKnownCrap(metric, crapMax);
 }
 
 function compareKnownCrap(left: CrapValue, right: CrapValue): number {
@@ -685,8 +686,11 @@ function compareMetrics(left: CallableMetric, right: CallableMetric): number {
   );
 }
 
-export function sortCallableMetrics(metrics: readonly CallableMetric[]): readonly CallableMetric[] {
-  for (const metric of metrics) validateMetricForSort(metric);
+export function sortCallableMetrics(
+  metrics: readonly CallableMetric[],
+  crapMax: Threshold = DEFAULT_GATE.crapMax,
+): readonly CallableMetric[] {
+  for (const metric of metrics) validateMetricForSort(metric, crapMax);
   const sorted = [...metrics].sort(compareMetrics);
   for (let index = 1; index < sorted.length; index += 1) {
     const previous = sorted[index - 1];
@@ -704,6 +708,7 @@ export function sortCallableMetrics(metrics: readonly CallableMetric[]): readonl
 export function attachCoverage(
   callables: readonly CallableRecord[],
   coverageFile: CoverageFileRecord | null,
+  crapMax: Threshold = DEFAULT_GATE.crapMax,
 ): readonly CallableMetric[] {
   if (coverageFile === null) {
     return sortCallableMetrics(callables.map((callable) => ({
@@ -745,7 +750,7 @@ export function attachCoverage(
       return {
         ...callable,
         coverage: { covered, total: 1 },
-        crap: computeCrap(callable.complexity, covered, 1),
+        crap: computeCrap(callable.complexity, covered, 1, crapMax),
         unknownReason: null,
       };
     }
@@ -754,9 +759,9 @@ export function attachCoverage(
     return {
       ...callable,
       coverage: { covered, total },
-      crap: computeCrap(callable.complexity, covered, total),
+      crap: computeCrap(callable.complexity, covered, total, crapMax),
       unknownReason: null,
     };
   });
-  return sortCallableMetrics(metrics);
+  return sortCallableMetrics(metrics, crapMax);
 }

@@ -38,6 +38,7 @@ const EVIDENCE_BODY = {
   components: {
     crap: {
       callableCount: 1,
+      crapMax: "8",
       maxNumerator: "8",
       maxDenominator: "1",
       pass: true,
@@ -55,6 +56,7 @@ const EVIDENCE_BODY = {
       ignored: 0,
       toolError: 0,
       unauthorizedExclusion: 0,
+      mutationMin: "100",
       pass: true,
     },
   },
@@ -237,10 +239,10 @@ test("evidence matches the SPEC HMAC golden and validates the event ordinal", as
   const projectState = contract.validateProjectStateFile(Buffer.from(PROJECT_STATE_FILE_HEX, "hex"));
   const payload = contract.buildEvidenceFile(EVIDENCE_BODY, projectState);
   const document = contract.validateEvidenceFile(payload, projectState);
-  assert.equal(document.hmacSha256, "4542679c4ce361bd22a29d30a2f4bfd6149a8e2cbd6ef15984cfa1ff697cae32");
+  assert.equal(document.hmacSha256, "1aaaa38f58a49f6d64bcda9f05037e4432c88766f02a3000f8d9ef520fffc66e");
   assert.equal(
     contract.sha256(payload),
-    "ab218bbdf80c72b02f93e432a938191612869681803a519f24379ba3b092df6a",
+    "40869448a1bc56bdc0a7c3cd528db367d838f71253733fab45d5e30a216d72ba",
   );
 
   const invalid = structuredClone(EVIDENCE_BODY);
@@ -308,11 +310,15 @@ test("CRAP evidence rejects empty inventories that pass and inconsistent invento
   const contract = await loadContract();
   const projectState = contract.validateProjectStateFile(Buffer.from(PROJECT_STATE_FILE_HEX, "hex"));
   for (const [component, code] of [
-    [{ callableCount: 0, maxNumerator: "0", maxDenominator: "1", pass: true, unknownCount: 0 },
+    [{ callableCount: 0, crapMax: "8", maxNumerator: "0", maxDenominator: "1", pass: true, unknownCount: 0 },
       "crapComponentSemanticsInvalid"],
-    [{ callableCount: 1, maxNumerator: "8", maxDenominator: "1", pass: false, unknownCount: 1 },
+    [{ callableCount: 1, crapMax: "8", maxNumerator: "8", maxDenominator: "1", pass: false, unknownCount: 1 },
       "crapComponentInventoryInvalid"],
-    [{ callableCount: 1, maxNumerator: "0", maxDenominator: "1", pass: false, unknownCount: 2 },
+    [{ callableCount: 1, crapMax: "8", maxNumerator: "0", maxDenominator: "1", pass: false, unknownCount: 2 },
+      "crapComponentInvalid"],
+    [{ callableCount: 1, crapMax: "9", maxNumerator: "9", maxDenominator: "1", pass: false, unknownCount: 0 },
+      "crapComponentSemanticsInvalid"],
+    [{ callableCount: 1, crapMax: "08", maxNumerator: "8", maxDenominator: "1", pass: true, unknownCount: 0 },
       "crapComponentInvalid"],
   ]) {
     const invalid = structuredClone(EVIDENCE_BODY);

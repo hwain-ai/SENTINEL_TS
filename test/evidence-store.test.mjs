@@ -34,6 +34,7 @@ function mutationComponent(pass = false) {
     ignored: 0,
     toolError: 0,
     unauthorizedExclusion: 0,
+    mutationMin: "100",
     pass,
   };
 }

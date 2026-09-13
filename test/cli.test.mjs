@@ -178,6 +178,15 @@ test("crap, check, and doctor expose machine-readable vertical slices", async ()
   const crapIo = dependencies(project, []);
   assert.equal(await runCli(["crap", "--input", crapPath], crapIo.value), 2);
   assert.equal(JSON.parse(crapIo.output.join("")).rows[0].id, "risky");
+  assert.equal(JSON.parse(crapIo.output.join("")).crapMax, "8");
+
+  const raisedIo = dependencies(project, []);
+  assert.equal(await runCli(["crap", "--input", crapPath, "--crap-max", "9"], raisedIo.value), 0);
+  assert.equal(JSON.parse(raisedIo.output.join("")).crapMax, "9");
+
+  const invalidIo = dependencies(project, []);
+  assert.equal(await runCli(["crap", "--input", crapPath, "--crap-max", "9."], invalidIo.value), 3);
+  assert.equal(JSON.parse(invalidIo.errors.join("")).error.code, "crapMaxInvalid");
 
   const checkPath = join(project, "check.json");
   await writeFile(
@@ -199,6 +208,18 @@ test("crap, check, and doctor expose machine-readable vertical slices", async ()
     2,
   );
   assert.deepEqual(JSON.parse(checkIo.output.join("")).pass, false);
+
+  const lenientIo = dependencies(project, [runId("6")]);
+  assert.equal(
+    await runCli(["check", "--input", checkPath, "--project", project, "--mutation-min", "0"], lenientIo.value),
+    0,
+  );
+  const lenient = JSON.parse(lenientIo.output.join(""));
+  assert.equal(lenient.pass, true);
+  assert.deepEqual(lenient.gate, { crapMax: "8", mutationMin: "0" });
+  const recorded = (await readRunEvidence(project)).find((run) => run.runId === runId("6"));
+  assert.equal(recorded.components.mutation.mutationMin, "0");
+  assert.equal(recorded.components.crap.crapMax, "8");
 
   const doctorIo = dependencies(project, []);
   assert.equal(await runCli(["doctor"], doctorIo.value), 0);

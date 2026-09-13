@@ -176,6 +176,37 @@ test("check joins native CRAP input with the real project mutation run", async (
   assert.equal(evidence.command, "check");
 });
 
+test("check without --input measures fresh coverage CRAP and the project mutation run", async () => {
+  const project = await writeProject();
+  const io = dependencies(project);
+
+  const exitCode = await runCli(["check", "--project", project], io.value);
+
+  assert.equal(exitCode, 0, io.errors.join(""));
+  const document = JSON.parse(io.output.join(""));
+  assert.equal(document.pass, true);
+  assert.deepEqual(document.gate, { crapMax: "8", mutationMin: "100" });
+  assert.equal(document.crap.rows.length, 1);
+  assert.ok(document.crap.rows[0].id.startsWith("src/value.ts:"));
+  assert.equal(document.crap.rows[0].pass, true);
+  assert.deepEqual(document.crap.unknown, []);
+  assert.equal(document.mutation.gate.pass, true);
+  await assert.rejects(() => readdir(join(project, ".sentinel-runtime")), /ENOENT/u);
+  await assert.rejects(() => readdir(join(project, "coverage")), /ENOENT/u);
+  const evidence = JSON.parse(
+    await readFile(join(project, ".sentinel", "state-v1", "runs", RUN_ID, "evidence.json"), "utf8"),
+  );
+  assert.equal(evidence.components.crap.callableCount, 1);
+  assert.equal(evidence.components.crap.crapMax, "8");
+  assert.equal(evidence.components.mutation.mutationMin, "100");
+
+  const strictProject = await writeProject();
+  const strictIo = dependencies(strictProject);
+  const strictExit = await runCli(["check", "--project", strictProject, "--crap-max", "0.5"], strictIo.value);
+  assert.equal(strictExit, 2, strictIo.errors.join(""));
+  assert.equal(JSON.parse(strictIo.output.join("")).crap.pass, false);
+});
+
 test("does not count an actual mutant-triggered TypeError as killed", async () => {
   const project = await writeProject();
   await writeFile(

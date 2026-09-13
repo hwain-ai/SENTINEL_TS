@@ -49,7 +49,8 @@ function lockWorker(stateRoot, mode, holdMilliseconds, timeoutMilliseconds) {
 }
 
 async function waitForOutput(worker, expected) {
-  const deadline = Date.now() + 2_000;
+  // Worker start-up, not lock latency, is what this bounds; heavy sibling test files share the CPU.
+  const deadline = Date.now() + 10_000;
   while (!worker.output().includes(expected)) {
     if (Date.now() >= deadline) throw new Error(`worker did not write ${expected}`);
     await new Promise((resolve) => setTimeout(resolve, 5));

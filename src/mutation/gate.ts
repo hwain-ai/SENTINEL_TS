@@ -1,3 +1,4 @@
+import { DEFAULT_GATE, killRatePasses, type Threshold } from "../gate.js";
 import {
   MUTATION_STATES,
   MutationProtocolError,
@@ -76,25 +77,27 @@ function requireExactResultSet(candidateIds: Set<string>, resultIds: Set<string>
   }
 }
 
+// At the default 100 percent this is exactly killed === inScope with every other state at zero.
 function mutationPassed(
   inScope: number,
   counts: Readonly<Record<MutationState, number>>,
   unauthorizedExclusion: number,
+  mutationMin: Threshold,
 ): boolean {
-  const onlyKilled = MUTATION_STATES.every((state) => state === "killed" || counts[state] === 0);
-  return inScope > 0 && counts.killed === inScope && onlyKilled && unauthorizedExclusion === 0;
+  return inScope > 0 && unauthorizedExclusion === 0 && killRatePasses(counts.killed, inScope, mutationMin);
 }
 
 export function evaluateMutationGate(
   candidates: readonly CandidateIdentity[],
   outcomes: readonly NormalizedMutationOutcome[],
   unauthorizedExclusion: number,
+  mutationMin: Threshold = DEFAULT_GATE.mutationMin,
 ): MutationGateResult {
   requireUnauthorizedExclusion(unauthorizedExclusion);
   const candidateIds = candidateIdSet(candidates);
   const { counts, resultIds } = countOutcomes(outcomes);
   requireExactResultSet(candidateIds, resultIds);
   const inScope = candidateIds.size;
-  const pass = mutationPassed(inScope, counts, unauthorizedExclusion);
+  const pass = mutationPassed(inScope, counts, unauthorizedExclusion, mutationMin);
   return { pass, inScope, counts, unauthorizedExclusion };
 }

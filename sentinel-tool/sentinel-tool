@@ -1,0 +1,86 @@
+#!/usr/bin/python3 -I
+"""SENTINEL tool-protocol adapter for the TypeScript checker.
+
+Reads one sentinel-tool-protocol-v1 request from stdin, runs the locked
+sentinel-ts check (fresh coverage CRAP plus the Stryker mutation run) from the
+repository named in the sibling ``home`` file and writes exactly one response
+to stdout. Checker output goes to a temporary log, never to this stdout.
+"""
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+STATUS_BY_EXIT = {
+    0: "passed",
+    1: "toolError",
+    2: "qualityFailed",
+    3: "usageConfigError",
+    4: "baselineFailed",
+    5: "dependencyError",
+    6: "backendError",
+    7: "evidenceError",
+}
+IDENTITY_KEYS = ("protocolVersion", "requestId", "command", "moduleId", "language")
+
+
+def main() -> int:
+    here = Path(__file__).resolve().parent
+    manifest = json.loads((here / "sentinel-tool.json").read_text(encoding="utf-8"))
+    home = Path((here / "home").read_text(encoding="utf-8").splitlines()[0])
+    request = json.load(sys.stdin)
+    response = {key: request.get(key) for key in IDENTITY_KEYS}
+    response["toolVersion"] = manifest["version"]
+
+    def finish(exit_code: int) -> int:
+        status = STATUS_BY_EXIT.get(exit_code, "backendError")
+        exit_code = 6 if status == "backendError" else exit_code
+        response.update(status=status, exitCode=exit_code, passed=status == "passed")
+        sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+        return exit_code
+
+    if (
+        request.get("protocolVersion") != "sentinel-tool-protocol-v1"
+        or request.get("command") != "check"
+        or request.get("language") != manifest["language"]
+    ):
+        return finish(3)
+    gate = request.get("gate") or {}
+    command = [
+        str(home / "scripts" / "node.sh"), "--entry", "sentinel-ts", "--",
+        "check", "--project", request["projectRoot"],
+    ]
+    if request.get("config"):
+        # sentinel-ts accepts only project-relative config paths; the protocol sends absolute ones.
+        config = Path(request["config"])
+        try:
+            relative = config.resolve().relative_to(Path(request["projectRoot"]).resolve())
+        except ValueError:
+            return finish(3)
+        command += ["--config", relative.as_posix()]
+    if "crapMax" in gate:
+        command += ["--crap-max", str(gate["crapMax"])]
+    if "mutationMin" in gate:
+        command += ["--mutation-min", str(gate["mutationMin"])]
+    with tempfile.TemporaryDirectory(prefix="sentinel-tool-typescript-") as directory:
+        with open(Path(directory) / "checker.log", "wb") as log:
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=request["projectRoot"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=log,
+                    check=False,
+                )
+            except OSError:
+                return finish(5)
+    return finish(completed.returncode)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

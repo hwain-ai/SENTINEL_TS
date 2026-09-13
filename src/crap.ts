@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import * as ts from "@typescript/old";
 
+import { DEFAULT_GATE, crapPasses, type Threshold } from "./gate.js";
 import {
   UnicodeScalarError,
   PathTextError,
@@ -1055,7 +1056,12 @@ export function renderCanonicalDecimal(numerator: bigint, denominator: bigint): 
   return fractional.length === 0 ? whole.toString() : `${whole}.${fractional}`;
 }
 
-export function computeCrap(complexity: unknown, covered: unknown, total: unknown): CrapValue {
+export function computeCrap(
+  complexity: unknown,
+  covered: unknown,
+  total: unknown,
+  crapMax: Threshold = DEFAULT_GATE.crapMax,
+): CrapValue {
   requireSafeInteger("cyclomaticComplexity", "complexity", complexity, 1);
   requireSafeInteger("coveredUnits", "covered units", covered, 0);
   requireSafeInteger("totalUnits", "total units", total, 1);
@@ -1080,6 +1086,6 @@ export function computeCrap(complexity: unknown, covered: unknown, total: unknow
     numerator: reducedNumerator.toString(),
     denominator: reducedDenominator.toString(),
     decimal: renderCanonicalDecimal(reducedNumerator, reducedDenominator),
-    pass: numerator <= 8n * denominator,
+    pass: crapPasses(numerator, denominator, crapMax),
   };
 }

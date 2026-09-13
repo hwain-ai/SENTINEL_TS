@@ -323,9 +323,9 @@ test("runs the first-party CLI only from the exact locked dist tree", async () =
   assert.deepEqual(lock.toolchains.node.firstPartyTools["sentinel-ts"], {
     status: "locked",
     entry: "dist/cli.js",
-    entrySha256: "fdf78498c03fb6b5d3e1bb8c09da321192c01cd8866637b4b2659a4a683aad44",
+    entrySha256: "ffd154f154116df52fedcadfd647d90bdb0a3d3cc7759591dd433e7594f590a7",
     tree: "dist",
-    treeSha256: "74d4e826341bb6c6b02e327d4f6722d016f8bd2b782e15b1892219bac1861739",
+    treeSha256: "d19a1cab28f0756632546bb7119d74c5cd3a62f60320d865d1810846ce9781a6",
   });
 
   const help = run(join(repositoryRoot, "scripts", "node.sh"), [
