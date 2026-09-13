@@ -335,6 +335,15 @@ async function rejectMutationDirectives(moduleRoot: string, production: readonly
   }
 }
 
+// Changed mode: keep only the changed production files as mutation and CRAP targets.
+// Returns null when no changed path is a production file, so nothing is judged.
+export function restrictProject(project: MutationProject, changed: readonly string[]): MutationProject | null {
+  const wanted = new Set(changed.map((value) => canonicalRelative(value, "changed file")));
+  const productionFiles = project.productionFiles.filter((file) => wanted.has(file));
+  if (productionFiles.length === 0) return null;
+  return { ...project, productionFiles };
+}
+
 export async function loadMutationProject(
   projectValue: string,
   configValue?: string,

@@ -2,6 +2,7 @@
 
 ## 2026-09-13
 
+- **Update** cli.ts·project.ts: `--changed-file`(반복)로 생산 파일을 변경분으로 좁힌다. 변경분에 생산 파일이 없으면 검사 없이 통과로 응답하고 증거를 남기지 않는다. 어댑터가 통합 요청의 changedFiles를 이 인자로 전달한다. dist 지문 재잠금, 자체 시험 176개 통과.
 - **Creation** gate.ts·crap-runner.ts·sentinel-tool/: CRAP 상한(`--crap-max`, 기본 8)과 변이 최소 kill 비율(`--mutation-min`, 기본 100)을 명령에서 받아 판정에 쓰고, `check --project`가 사본에서 잠긴 Vitest로 coverage를 만들어 CRAP을 직접 계산한다. 통합 SENTINEL의 도구 요청을 받는 어댑터와 첫 실행 준비 스크립트를 추가했다. 기준값 문자열 계약은 SENTINEL_SPEC threshold-v1.json과 같다.
 - **Update** evidence/contract.ts·cli.ts: crap 구성요소에 crapMax, mutation 구성요소에 mutationMin을 기록하고 의미 검사도 그 값으로 재계산한다. 이 항목이 없는 이전 증거 파일은 유효하지 않다. CRAP 초과 진단 코드는 crapAbove8에서 crapAboveLimit로 바꿨다.
 - **Update** toolchain.lock.json: 다시 빌드한 dist의 항목·트리 지문으로 첫 번째 도구 잠금을 갱신했다. 사본의 node_modules는 통째로 링크하지 않고 항목별로 링크해 Vitest 캐시가 검사기의 잠긴 의존성 트리에 쓰이지 않게 했다.

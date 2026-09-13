@@ -14,7 +14,7 @@ import {
   type Finding,
   type RunEvidenceDraft,
 } from "./history.js";
-import { loadMutationProject, type MutationProject } from "./project.js";
+import { loadMutationProject, restrictProject, type MutationProject } from "./project.js";
 import { evaluateMutationGate, type MutationGateResult } from "./mutation/gate.js";
 import { normalizeMutationOutcome } from "./mutation/normalizer.js";
 import { collectProjectMutation } from "./mutation/project-runner.js";
@@ -120,6 +120,28 @@ function requireKnownOption(
   if (!valueNames.includes(name) && !booleanNames.includes(name)) {
     throw new MutationProtocolError("invalidCliArguments", `unsupported command argument: ${name}`);
   }
+}
+
+const CHANGED_FILE = "--changed-file";
+
+// --changed-file repeats; it is split off before the single-value option parser runs.
+function splitChangedFiles(values: readonly string[]): { readonly changed: readonly string[]; readonly rest: readonly string[] } {
+  const changed: string[] = [];
+  const rest: string[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const name = values[index];
+    if (name !== CHANGED_FILE) {
+      rest.push(name as string);
+      continue;
+    }
+    const value = values[index + 1];
+    if (value === undefined || value.startsWith("--")) {
+      throw new MutationProtocolError("invalidCliArguments", `command argument requires a value: ${CHANGED_FILE}`);
+    }
+    changed.push(value);
+    index += 1;
+  }
+  return { changed, rest };
 }
 
 function requiredOption(options: Readonly<Record<string, string | true>>, name: string): string {
@@ -232,28 +254,46 @@ function analyzeMutationRecord(
   return { run, normalized, gate };
 }
 
+class EmptyChangedScope extends Error {
+  public constructor() {
+    super("no changed production file");
+    this.name = "EmptyChangedScope";
+  }
+}
+
 async function loadSelectedProject(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
+  changed: readonly string[] = [],
 ): Promise<{ readonly project: MutationProject; readonly projectRoot: string }> {
   const selectedProject = requiredOption(options, "--project");
   const projectRoot = path.resolve(dependencies.cwd, selectedProject);
   const config = options["--config"];
   const module = options["--module"];
-  const project = await loadMutationProject(
+  const loaded = await loadMutationProject(
     projectRoot,
     typeof config === "string" ? config : undefined,
     typeof module === "string" ? module : undefined,
   );
+  if (changed.length === 0) return { project: loaded, projectRoot };
+  const project = restrictProject(loaded, changed);
+  if (project === null) throw new EmptyChangedScope();
   return { project, projectRoot };
+}
+
+// Nothing judged, nothing failed, no evidence: the change touched no production file.
+function writeEmptyChangedScope(command: string, dependencies: CliDependencies): number {
+  writeJson(dependencies.writeOut, { changedScope: "empty", command, pass: true });
+  return 0;
 }
 
 async function analyzeProjectMutation(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
   mutationMin: Threshold,
+  changed: readonly string[] = [],
 ): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
-  const { project, projectRoot } = await loadSelectedProject(options, dependencies);
+  const { project, projectRoot } = await loadSelectedProject(options, dependencies, changed);
   const collected = await collectProjectMutation(project);
   return {
     analysis: analyzeMutationRecord(collected.run, collected.proofs, 0, mutationMin),
@@ -411,21 +451,36 @@ async function runHistory(arguments_: readonly string[], dependencies: CliDepend
   return 0;
 }
 
+function rejectChangedWithInput(options: Readonly<Record<string, string | true>>, changed: readonly string[]): void {
+  if (changed.length > 0 && typeof options["--input"] === "string") {
+    throw new MutationProtocolError("invalidCliArguments", `${CHANGED_FILE} applies only to --project runs`);
+  }
+}
+
 async function crapExecution(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
   crapMax: Threshold,
+  changed: readonly string[],
 ): Promise<CrapAnalysis> {
   const input = options["--input"];
   if (typeof input === "string") return analyzeCrap(await readJson(input, dependencies.cwd), crapMax);
-  const { project } = await loadSelectedProject(options, dependencies);
+  const { project } = await loadSelectedProject(options, dependencies, changed);
   return projectCrapAnalysis(await collectProjectCrap(project, crapMax));
 }
 
 async function runCrap(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--crap-max"]);
+  const { changed, rest } = splitChangedFiles(arguments_);
+  const options = parseOptions(rest, ["--input", "--project", "--config", "--module", "--crap-max"]);
+  rejectChangedWithInput(options, changed);
   const gate = gateOptions(options);
-  const analysis = await crapExecution(options, dependencies, gate.crapMax);
+  let analysis: CrapAnalysis;
+  try {
+    analysis = await crapExecution(options, dependencies, gate.crapMax, changed);
+  } catch (error) {
+    if (error instanceof EmptyChangedScope) return writeEmptyChangedScope("crap", dependencies);
+    throw error;
+  }
   writeJson(dependencies.writeOut, { ...analysis, crapMax: gate.crapMax.text });
   return analysis.pass ? 0 : 2;
 }
@@ -434,9 +489,10 @@ async function mutationExecution(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
   mutationMin: Threshold,
+  changed: readonly string[],
 ): Promise<{ readonly analysis: MutationAnalysis; readonly projectRoot: string }> {
   const input = options["--input"];
-  if (typeof input !== "string") return analyzeProjectMutation(options, dependencies, mutationMin);
+  if (typeof input !== "string") return analyzeProjectMutation(options, dependencies, mutationMin, changed);
   return {
     analysis: analyzeMutation(await readJson(input, dependencies.cwd), mutationMin),
     projectRoot: requiredOption(options, "--project"),
@@ -444,9 +500,17 @@ async function mutationExecution(
 }
 
 async function runMutation(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--mutation-min"]);
+  const { changed, rest } = splitChangedFiles(arguments_);
+  const options = parseOptions(rest, ["--input", "--project", "--config", "--module", "--mutation-min"]);
+  rejectChangedWithInput(options, changed);
   const gate = gateOptions(options);
-  const execution = await mutationExecution(options, dependencies, gate.mutationMin);
+  let execution: { readonly analysis: MutationAnalysis; readonly projectRoot: string };
+  try {
+    execution = await mutationExecution(options, dependencies, gate.mutationMin, changed);
+  } catch (error) {
+    if (error instanceof EmptyChangedScope) return writeEmptyChangedScope("mutation", dependencies);
+    throw error;
+  }
   const analysis = execution.analysis;
   await record(
     "mutation",
@@ -486,8 +550,9 @@ async function projectCheckExecution(
   options: Readonly<Record<string, string | true>>,
   dependencies: CliDependencies,
   gate: GateThresholds,
+  changed: readonly string[],
 ): Promise<CheckExecution> {
-  const { project, projectRoot } = await loadSelectedProject(options, dependencies);
+  const { project, projectRoot } = await loadSelectedProject(options, dependencies, changed);
   const crap = projectCrapAnalysis(await collectProjectCrap(project, gate.crapMax));
   const collected = await collectProjectMutation(project);
   const mutation = analyzeMutationRecord(collected.run, collected.proofs, 0, gate.mutationMin);
@@ -495,12 +560,20 @@ async function projectCheckExecution(
 }
 
 async function runCheck(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
-  const options = parseOptions(arguments_, ["--input", "--project", "--config", "--module", "--crap-max", "--mutation-min"]);
+  const { changed, rest } = splitChangedFiles(arguments_);
+  const options = parseOptions(rest, ["--input", "--project", "--config", "--module", "--crap-max", "--mutation-min"]);
+  rejectChangedWithInput(options, changed);
   const gate = gateOptions(options);
   const inputPath = options["--input"];
-  const execution = typeof inputPath === "string"
-    ? await inputCheckExecution(inputPath, options, dependencies, gate)
-    : await projectCheckExecution(options, dependencies, gate);
+  let execution: CheckExecution;
+  try {
+    execution = typeof inputPath === "string"
+      ? await inputCheckExecution(inputPath, options, dependencies, gate)
+      : await projectCheckExecution(options, dependencies, gate, changed);
+  } catch (error) {
+    if (error instanceof EmptyChangedScope) return writeEmptyChangedScope("check", dependencies);
+    throw error;
+  }
   const { crap, mutation } = execution;
   const pass = crap.pass && mutation.gate.pass;
   await record(

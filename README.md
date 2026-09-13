@@ -13,6 +13,11 @@ module과 source digest의 callable에만 연결해 CRAP을 exact 분수로 계�
 변이 검사를 돌려 두 결과를 하나의 증거로 기록합니다. `--input`으로 미리 계산한 CRAP 행을 넘기는
 방식도 그대로 지원합니다.
 
+변경분만 검사하려면 `--changed-file 경로`(프로젝트 기준 상대 경로, 반복 가능)를 `--project` 실행에 넘깁니다.
+생산 파일에 해당하는 경로만 CRAP 측정과 Stryker 변이 대상으로 남기고, 나머지 소스는 컴파일용 지원 파일로
+사본에 함께 둡니다. 넘긴 경로 중 생산 파일이 없으면 판정할 대상이 없으므로 검사 없이 통과(종료 0,
+`changedScope: empty`)로 응답하고 증거를 남기지 않습니다. `--input`과는 함께 쓸 수 없습니다.
+
 기준값은 `crap`, `mutation`, `check`의 `--crap-max`(CRAP 상한, 기본 8)와 `--mutation-min`(변이 최소
 kill 비율 %, 기본 100)으로 넘깁니다. 정수 또는 소수점 두 자리까지의 문자열이며 정확한 분수로 비교하고,
 증거 파일의 crap·mutation 구성요소에 판정에 쓴 crapMax·mutationMin을 함께 기록합니다.
