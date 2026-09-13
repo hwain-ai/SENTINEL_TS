@@ -132,7 +132,8 @@ class FakeOfficialRunner {
     return this.dryRuns.shift();
   }
 
-  async mutantRun() {
+  async mutantRun(options) {
+    (this.seenOptions ??= []).push(options);
     return this.mutantRuns.shift();
   }
 
@@ -170,6 +171,23 @@ test("proof runner replays controls and assertion kills before writing a typed p
   } finally {
     delete process.env.SENTINEL_TS_PROOF_DIR;
   }
+});
+
+test("proof runner activates a static mutant before import and leaves runtime mutants alone", async () => {
+  const survived = { status: "survived", nrOfTests: 1 };
+  const delegate = new FakeOfficialRunner([], [survived, survived, survived, survived]);
+  const runner = new SentinelVitestRunner(delegate);
+
+  await runner.mutantRun({ activeMutant: { id: "s1" }, mutantActivation: "runtime", reloadEnvironment: true, testFilter: ["a"] });
+  await runner.mutantRun({ activeMutant: { id: "r1" }, mutantActivation: "runtime", reloadEnvironment: false, testFilter: ["a"] });
+
+  assert.deepEqual(delegate.seenOptions.map((options) => [options.activeMutant.id, options.mutantActivation]), [
+    ["s1", "static"],
+    ["s1", "static"],
+    ["r1", "runtime"],
+    ["r1", "runtime"],
+  ]);
+  assert.deepEqual(delegate.seenOptions[0].testFilter, ["a"]);
 });
 
 test("proof runner fails closed when the two control runs disagree", async () => {

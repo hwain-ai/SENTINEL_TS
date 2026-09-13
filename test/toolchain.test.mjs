@@ -325,7 +325,7 @@ test("runs the first-party CLI only from the exact locked dist tree", async () =
     entry: "dist/cli.js",
     entrySha256: "4d7b51cc09786d500a4e61282509c928b0b513c506f41e31df64d678d725ae85",
     tree: "dist",
-    treeSha256: "2733b7350a8328fecb9231d411fe31706fa1a33dece97376e33fdf40375474ec",
+    treeSha256: "bbda1417376cb9fbfd29aa609bf0a8c8cf86b4604c08e39ca30ff3fff892b0f0",
   });
 
   const help = run(join(repositoryRoot, "scripts", "node.sh"), [

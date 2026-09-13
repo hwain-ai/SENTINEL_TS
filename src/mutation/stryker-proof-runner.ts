@@ -26,7 +26,22 @@ type MutantRunResult =
 
 interface MutantRunOptions {
   readonly activeMutant: { readonly id: string };
+  readonly mutantActivation?: "static" | "runtime";
+  readonly reloadEnvironment?: boolean;
   readonly [key: string]: unknown;
+}
+
+// Stryker derives mutantActivation from "is there a test filter", and the closed
+// configuration always names its test files, so every mutant arrives as "runtime".
+// A static mutant (module-level code, evaluated at import) must be active before the
+// test file imports the source, or it can never be observed. Stryker marks exactly
+// those mutants with reloadEnvironment, because a hot swap is only allowed for
+// non-static mutants under a test filter.
+function withStaticActivation(options: MutantRunOptions): MutantRunOptions {
+  if (options.reloadEnvironment !== true || options.mutantActivation === "static") {
+    return options;
+  }
+  return { ...options, mutantActivation: "static" };
 }
 
 interface OfficialRunner {
@@ -181,11 +196,12 @@ export class SentinelVitestRunner {
   public async mutantRun(
     options: MutantRunOptions,
   ): Promise<MutantRunResult> {
+    const activated = withStaticActivation(options);
     const firstNonce = randomBytes(16).toString("hex");
-    const first = await this.delegate.mutantRun(options);
+    const first = await this.delegate.mutantRun(activated);
     const firstAssertion = assertionType(this.delegate);
     const secondNonce = randomBytes(16).toString("hex");
-    const second = await this.delegate.mutantRun(options);
+    const second = await this.delegate.mutantRun(activated);
     const secondAssertion = assertionType(this.delegate);
     if (first.status === "killed") {
       writeProof({
