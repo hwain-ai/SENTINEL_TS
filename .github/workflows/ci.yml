@@ -1,6 +1,5 @@
 # TypeScript 검사기 자체 시험을 지원 플랫폼 전부에서 돌린다. scripts/toolchain.py setup 이 잠금 파일의 해당 플랫폼 항목으로
-# Node·패키지·dist 빌드를 준비하고, 같은 실행기로 시험을 돌린다. 플랫폼별 의존성 지문이 아직 pending 이면 시험 대신
-# describe-dependencies 로 지문을 출력해 잠금 파일에 옮겨 적을 수 있게 한다.
+# Node·패키지·dist 빌드를 준비하고, 같은 실행기로 시험을 돌린다.
 name: ci
 
 on:
@@ -24,13 +23,21 @@ jobs:
         with:
           path: .toolchain
           key: ts-toolchain-${{ matrix.os }}-${{ hashFiles('toolchain.lock.json', 'package-lock.json') }}
-      - name: Bootstrap the locked Node and install the locked packages
+      - name: Bootstrap the checker (locked Node, packages and dist build)
+        run: python3 -I -B scripts/toolchain.py setup
+      - name: Run the checker's tests
+        run: python3 -I -B scripts/toolchain.py node --test test/*.test.mjs
+      - name: Report dependency-tree drift (diagnostic)
+        if: always()
         run: |
-          python3 -I -B scripts/toolchain.py bootstrap
-          python3 -I -B scripts/toolchain.py npm ci --offline || python3 -I -B scripts/toolchain.py npm ci
-      - name: Print dependency fingerprints for the lock (pending platforms only)
-        run: python3 -I -B scripts/toolchain.py describe-dependencies
-      - name: Build, doctor and run the checker's tests
-        run: |
-          python3 -I -B scripts/toolchain.py setup
-          python3 -I -B scripts/toolchain.py node --test test/*.test.mjs
+          python3 -I -B scripts/toolchain.py describe-dependencies
+          python3 - <<'PY'
+          import os, time
+          from pathlib import Path
+          root = Path("node_modules"); marker = root / ".vite-temp"
+          if marker.exists():
+              cutoff = marker.stat().st_mtime
+              changed = [str(p) for p in root.rglob("*") if p.lstat().st_mtime > cutoff + 1]
+              print("entries newer than .vite-temp:", len(changed))
+              print("\n".join(changed[:60]))
+          PY
