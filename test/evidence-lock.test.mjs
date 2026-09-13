@@ -57,18 +57,11 @@ async function waitForOutput(worker, expected) {
   }
 }
 
-test("uses the approved Linux x64 struct flock ABI", () => {
-  assert.deepEqual(posixFcntlAbi(), {
-    alignment: 8,
-    offsets: {
-      l_len: 16,
-      l_pid: 24,
-      l_start: 8,
-      l_type: 0,
-      l_whence: 2,
-    },
-    size: 32,
-  });
+test("uses the approved struct flock ABI of this platform", () => {
+  const expected = process.platform === "darwin"
+    ? { alignment: 8, offsets: { l_len: 8, l_pid: 16, l_start: 0, l_type: 20, l_whence: 22 }, size: 24 }
+    : { alignment: 8, offsets: { l_len: 16, l_pid: 24, l_start: 8, l_type: 0, l_whence: 2 }, size: 32 };
+  assert.deepEqual(posixFcntlAbi(), expected);
 });
 
 test("fails closed for a missing or non-private commit lock", async () => {

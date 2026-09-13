@@ -7,11 +7,12 @@ import argparse
 import hashlib
 import json
 import os
+import platform as platform_module
 import re
 import stat
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlsplit
 
 
@@ -23,7 +24,38 @@ NODE_ARCHIVE_HOST = "nodejs.org"
 NODE_BINARY = Path("bin/node")
 NPM_CLI = Path("lib/node_modules/npm/bin/npm-cli.js")
 TSC_ENTRY = Path("node_modules/@typescript/native/lib/tsc.js")
-TSC_BINARY = Path("node_modules/@typescript/typescript-linux-x64/lib/tsc")
+# Platform keys map to the names Node and the TypeScript native package use.
+PLATFORM_KEYS = ("linux-x86_64", "linux-aarch64", "darwin-x86_64", "darwin-aarch64")
+NODE_PLATFORMS = {
+    "linux-x86_64": "linux-x64",
+    "linux-aarch64": "linux-arm64",
+    "darwin-x86_64": "darwin-x64",
+    "darwin-aarch64": "darwin-arm64",
+}
+PENDING_STATUS = "pending"
+PENDING_DIGEST = "pending"
+
+
+def platform_key(system: Optional[str] = None, machine: Optional[str] = None) -> str:
+    """linux-x86_64 | linux-aarch64 | darwin-x86_64 | darwin-aarch64 for this host."""
+
+    system = (system or platform_module.system()).lower()
+    machine = (machine or platform_module.machine()).lower()
+    if system not in ("linux", "darwin"):
+        raise LockError(f"unsupported operating system: {system}")
+    if machine in ("x86_64", "amd64"):
+        architecture = "x86_64"
+    elif machine in ("aarch64", "arm64"):
+        architecture = "aarch64"
+    else:
+        raise LockError(f"unsupported architecture: {machine}")
+    return f"{system}-{architecture}"
+
+
+def tsc_binary(toolchain: dict[str, Any]) -> Path:
+    """The TypeScript native binary for the selected platform (legacy flat locks mean Linux x64)."""
+
+    return Path(toolchain.get("tscBinaryPath", "node_modules/@typescript/typescript-linux-x64/lib/tsc"))
 STRYKER_ENTRY = Path("node_modules/@stryker-mutator/core/bin/stryker.js")
 STRYKER_PACKAGE = "@stryker-mutator/core"
 STRYKER_VERSION = "10.0.0"
@@ -85,32 +117,65 @@ def _load(path: Path) -> dict[str, Any]:
     return document
 
 
-def _validate_archive_url(value: str, version: str) -> None:
+def _validate_archive_url(value: str, version: str, platform: Optional[str]) -> None:
     try:
         parsed = urlsplit(value)
         port = parsed.port
     except ValueError as error:
         raise LockError("node archive URL is malformed") from error
-    expected_path = (
-        f"/download/release/v{version}/node-v{version}-linux-x64.tar.xz"
-    )
+    node_platforms = [NODE_PLATFORMS[platform]] if platform else list(NODE_PLATFORMS.values())
+    expected_paths = {
+        f"/download/release/v{version}/node-v{version}-{node_platform}.tar.xz" for node_platform in node_platforms
+    }
     if (
         parsed.scheme != "https"
         or parsed.hostname != NODE_ARCHIVE_HOST
         or port is not None
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.path != expected_path
+        or parsed.path not in expected_paths
         or parsed.query
         or parsed.fragment
     ):
         raise LockError("node archive URL is not the approved immutable release URL")
 
 
-def _select(document: dict[str, Any], require_locked: bool) -> dict[str, Any]:
+def _for_platform(toolchain: dict[str, Any], platform: Optional[str]) -> tuple[dict[str, Any], Optional[str]]:
+    """Merge the platforms[...] entry into the common fields; legacy flat locks pass through."""
+
+    platforms = toolchain.get("platforms")
+    if platforms is None:
+        return toolchain, None
+    if not isinstance(platforms, dict):
+        raise LockError("node platforms must be an object")
+    key = platform or platform_key()
+    entry = platforms.get(key)
+    if not isinstance(entry, dict):
+        raise LockError(f"node toolchain has no entry for platform {key}")
+    merged = {name: value for name, value in toolchain.items() if name != "platforms"}
+    merged.update(entry)
+    merged["platform"] = key
+    return merged, key
+
+
+def _dependency_digest(toolchain: dict[str, Any], key: str, allow_pending: bool) -> str:
+    """A platform's dependency fingerprint, or 'pending' when not yet measured on that platform."""
+
+    value = toolchain.get(key)
+    if value == PENDING_DIGEST and toolchain.get("platformStatus") == PENDING_STATUS:
+        if allow_pending:
+            return PENDING_DIGEST
+        raise LockError(f"node platform {toolchain.get('platform')} dependency lock is pending")
+    return _sha256(toolchain, key)
+
+
+def _select(
+    document: dict[str, Any], require_locked: bool, platform: Optional[str] = None, allow_pending: bool = False
+) -> dict[str, Any]:
     toolchain = document["toolchains"].get("node")
     if not isinstance(toolchain, dict):
         raise LockError("node toolchain is pending")
+    toolchain, key = _for_platform(toolchain, platform)
     repository_status = _text(document, "status")
     tool_status = _text(toolchain, "status")
     if require_locked and (repository_status != LOCKED_STATUS or tool_status != LOCKED_STATUS):
@@ -130,23 +195,23 @@ def _select(document: dict[str, Any], require_locked: bool) -> dict[str, Any]:
         raise LockError("node installDirectory is unsafe")
     if not isinstance(archive_size, int) or isinstance(archive_size, bool) or archive_size < 1:
         raise LockError("node archiveSize is invalid")
-    _validate_archive_url(archive_url, version)
+    _validate_archive_url(archive_url, version, key)
     version_output = _text(toolchain, "versionOutput")
     npm_version_output = _text(toolchain, "npmVersionOutput")
     if version_output != f"v{version}" or npm_version_output != npm_version:
         raise LockError("node or npm version output does not match the selected release")
-    for key in (
+    for name in (
         "archiveSha256",
         "binarySha256",
         "npmCliSha256",
         "installedTreeSha256",
-        "dependencyTreeSha256",
         "packageLockSha256",
         "tscEntrySha256",
-        "tscBinarySha256",
         "emptyConfigSha256",
     ):
-        _sha256(toolchain, key)
+        _sha256(toolchain, name)
+    for name in ("dependencyTreeSha256", "tscBinarySha256"):
+        _dependency_digest(toolchain, name, allow_pending)
     if require_locked and (version != "22.23.1" or npm_version != "10.9.8"):
         raise LockError("node or npm version does not match the approved release")
     _select_stryker(toolchain, require_locked)
@@ -286,7 +351,8 @@ def _add_tree_entry(digest: Any, resolved_root: Path, root: Path, path: Path) ->
         _record(digest, b"directory", path_bytes, mode, b"")
         return
     if stat.S_ISLNK(metadata.st_mode):
-        _add_symlink(digest, resolved_root, path, path_bytes, mode)
+        # Symlink modes differ between Linux (777) and macOS (umask-dependent); only the target matters.
+        _add_symlink(digest, resolved_root, path, path_bytes, 0o777)
         return
     raise LockError(f"installed tree contains special file: {relative}")
 
@@ -344,7 +410,7 @@ def _verify_dependency_tree(toolchain: dict[str, Any], repository: Path) -> None
         toolchain, "tscEntrySha256"
     ):
         raise LockError("TypeScript entry checksum mismatch")
-    if _sha256_file(repository / TSC_BINARY, "TypeScript binary") != _text(
+    if _sha256_file(repository / tsc_binary(toolchain), "TypeScript binary") != _text(
         toolchain, "tscBinarySha256"
     ):
         raise LockError("TypeScript binary checksum mismatch")
@@ -425,6 +491,8 @@ def main() -> int:
     parser.add_argument("lock", type=Path)
     parser.add_argument("tool", choices=("node",))
     parser.add_argument("--require-locked", action="store_true")
+    parser.add_argument("--platform", choices=PLATFORM_KEYS)
+    parser.add_argument("--allow-pending", action="store_true")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--verify-tree", type=Path)
     action.add_argument("--print-tree-digest", type=Path)
@@ -436,7 +504,7 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         document = _load(arguments.lock)
-        toolchain = _select(document, arguments.require_locked)
+        toolchain = _select(document, arguments.require_locked, arguments.platform, arguments.allow_pending)
         if arguments.verify_tree is not None:
             _verify_runtime(toolchain, arguments.verify_tree)
         elif arguments.print_tree_digest is not None:

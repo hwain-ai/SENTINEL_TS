@@ -6,20 +6,10 @@
       "status": "locked",
       "version": "22.23.1",
       "npmVersion": "10.9.8",
-      "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-linux-x64.tar.xz",
-      "archiveSize": 31068444,
-      "archiveSha256": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
-      "archiveRoot": "node-v22.23.1-linux-x64",
-      "installDirectory": "node-v22.23.1-linux-x64",
-      "binarySha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
-      "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
       "versionOutput": "v22.23.1",
       "npmVersionOutput": "10.9.8",
-      "installedTreeSha256": "613bf801db61a3ef31251e06d1d655331925284229deb48952b9aac06dc43cdc",
-      "dependencyTreeSha256": "c6ca93f422d06fba30dc3834c13144cc385ca0c788f7655d672348a624c3f13b",
       "packageLockSha256": "d7c183a727169778d3a7fa0fe0d03cbb56794a94502bac9867e1fb26c5a446e5",
       "tscEntrySha256": "cbdfbf11c26ed00dfc073155e316a42d6d6d8a387be61006b82fa9aa93ac572e",
-      "tscBinarySha256": "4f2de678286401759b3fb4475bafe35b8f32b4b3a07d92642bbf37eadc9b34a4",
       "emptyConfigSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "packageTools": {
         "stryker": {
@@ -40,7 +30,65 @@
           "entry": "dist/cli.js",
           "entrySha256": "4d7b51cc09786d500a4e61282509c928b0b513c506f41e31df64d678d725ae85",
           "tree": "dist",
-          "treeSha256": "1ef0ae879825a8d21c9e80c82c0b4e050b2d6db0efbf234876841552283cb254"
+          "treeSha256": "ab86a01f4e20588d48acff33dc6dbccb31d98195b754a20b8152d14e6ad50876"
+        }
+      },
+      "platforms": {
+        "linux-x86_64": {
+          "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-linux-x64.tar.xz",
+          "archiveSize": 31068444,
+          "archiveSha256": "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
+          "archiveRoot": "node-v22.23.1-linux-x64",
+          "installDirectory": "node-v22.23.1-linux-x64",
+          "binarySha256": "93956de2e59480474a7b46571da1651180b1a050cdf32641ebec4ce6e478e068",
+          "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "installedTreeSha256": "613bf801db61a3ef31251e06d1d655331925284229deb48952b9aac06dc43cdc",
+          "dependencyTreeSha256": "c6ca93f422d06fba30dc3834c13144cc385ca0c788f7655d672348a624c3f13b",
+          "tscBinarySha256": "4f2de678286401759b3fb4475bafe35b8f32b4b3a07d92642bbf37eadc9b34a4",
+          "tscBinaryPath": "node_modules/@typescript/typescript-linux-x64/lib/tsc",
+          "platformStatus": "locked"
+        },
+        "linux-aarch64": {
+          "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-linux-arm64.tar.xz",
+          "archiveSize": 30240748,
+          "archiveSha256": "0294e8b915ab75f92c7513d2fcb830ae06e10684e6c603e99a87dbf8835389c1",
+          "archiveRoot": "node-v22.23.1-linux-arm64",
+          "installDirectory": "node-v22.23.1-linux-arm64",
+          "binarySha256": "d8fa08f79c8198c5a5ccc9faa5a69803052703fc9513f99e7200e0ab42e1d799",
+          "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "installedTreeSha256": "43b73cd747cf01b98ecbe920d23316d249f08808db025bcde5fdefaaf6987a7c",
+          "dependencyTreeSha256": "pending",
+          "tscBinaryPath": "node_modules/@typescript/typescript-linux-arm64/lib/tsc",
+          "tscBinarySha256": "pending",
+          "platformStatus": "pending"
+        },
+        "darwin-x86_64": {
+          "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-darwin-x64.tar.xz",
+          "archiveSize": 27528028,
+          "archiveSha256": "efeec6641a2f15f5396d27cd0b32f5062d6689d1e9e5d89607d0b29bda890233",
+          "archiveRoot": "node-v22.23.1-darwin-x64",
+          "installDirectory": "node-v22.23.1-darwin-x64",
+          "binarySha256": "03afb3618a2685335209c93f8c34633f8316dbe6cc32196bc19daa1a73852e5b",
+          "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "installedTreeSha256": "a4e311e0257a2c0e439efd02805878bba312c945bf77d4815a90c94261e679d0",
+          "dependencyTreeSha256": "pending",
+          "tscBinaryPath": "node_modules/@typescript/typescript-darwin-x64/lib/tsc",
+          "tscBinarySha256": "pending",
+          "platformStatus": "pending"
+        },
+        "darwin-aarch64": {
+          "archiveUrl": "https://nodejs.org/download/release/v22.23.1/node-v22.23.1-darwin-arm64.tar.xz",
+          "archiveSize": 25962500,
+          "archiveSha256": "fb526811860f81dcac7dd8b2b55eca4accfc5d61c3b7c2508f2639faee8a738d",
+          "archiveRoot": "node-v22.23.1-darwin-arm64",
+          "installDirectory": "node-v22.23.1-darwin-arm64",
+          "binarySha256": "2e3f1286a7eb3736346ed1803e458a0ff909e2b2d5bc746144dcb76970e9b99d",
+          "npmCliSha256": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "installedTreeSha256": "5977dc9178d200500b7788f04379056f8c002e53604d5f883c4e6459d0a4874d",
+          "dependencyTreeSha256": "pending",
+          "tscBinaryPath": "node_modules/@typescript/typescript-darwin-arm64/lib/tsc",
+          "tscBinarySha256": "pending",
+          "platformStatus": "pending"
         }
       }
     }

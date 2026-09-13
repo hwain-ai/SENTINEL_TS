@@ -6,23 +6,57 @@ import koffi from "koffi";
 
 import { EvidenceContractError } from "./contract.js";
 
-const F_SETLK = 6;
-const F_RDLCK = 0;
-const F_WRLCK = 1;
 const SEEK_SET = 0;
 const LOCK_START = 0n;
 const LOCK_LENGTH = 1n;
+
+// POSIX advisory record locks through the C library. Linux (glibc, x86_64 and aarch64) and
+// Darwin (x86_64 and arm64) lay out struct flock differently and number the commands differently.
+interface FcntlAbi {
+  readonly library: string;
+  readonly F_SETLK: number;
+  readonly F_RDLCK: number;
+  readonly F_WRLCK: number;
+  readonly members: readonly (readonly [keyof FlockValue, string])[];
+  readonly size: number;
+  readonly offsets: Readonly<Record<keyof FlockValue, number>>;
+}
+
+const LINUX_ABI: FcntlAbi = {
+  library: "libc.so.6",
+  F_SETLK: 6,
+  F_RDLCK: 0,
+  F_WRLCK: 1,
+  members: [["l_type", "int16_t"], ["l_whence", "int16_t"], ["l_start", "int64_t"], ["l_len", "int64_t"], ["l_pid", "int32_t"]],
+  size: 32,
+  offsets: { l_type: 0, l_whence: 2, l_start: 8, l_len: 16, l_pid: 24 },
+};
+
+const DARWIN_ABI: FcntlAbi = {
+  library: "libSystem.B.dylib",
+  F_SETLK: 8,
+  F_RDLCK: 1,
+  F_WRLCK: 3,
+  members: [["l_start", "int64_t"], ["l_len", "int64_t"], ["l_pid", "int32_t"], ["l_type", "int16_t"], ["l_whence", "int16_t"]],
+  size: 24,
+  offsets: { l_start: 0, l_len: 8, l_pid: 16, l_type: 20, l_whence: 22 },
+};
+
+const SUPPORTED_ARCHITECTURES = new Set(["x64", "arm64"]);
+
+function platformAbi(): FcntlAbi | null {
+  if (!SUPPORTED_ARCHITECTURES.has(process.arch)) return null;
+  if (process.platform === "linux") return LINUX_ABI;
+  if (process.platform === "darwin") return DARWIN_ABI;
+  return null;
+}
+
+const ABI = platformAbi();
 const DEFAULT_TIMEOUT_MILLISECONDS = 5_000;
 const RETRY_MILLISECONDS = 10;
 const NANOSECONDS_PER_MILLISECOND = 1_000_000n;
 
-const Flock = koffi.struct({
-  l_type: "int16_t",
-  l_whence: "int16_t",
-  l_start: "int64_t",
-  l_len: "int64_t",
-  l_pid: "int32_t",
-});
+const Flock = koffi.struct(Object.fromEntries((ABI ?? LINUX_ABI).members));
 
 type Fcntl = (descriptor: number, command: number, lock: FlockValue) => number;
 
@@ -65,20 +99,19 @@ export function posixFcntlAbi(): {
   };
 }
 
-function abiIsSupported(): boolean {
-  const abi = posixFcntlAbi();
-  return abi.alignment === 8 && abi.size === 32 &&
-    abi.offsets.l_type === 0 && abi.offsets.l_whence === 2 &&
-    abi.offsets.l_start === 8 && abi.offsets.l_len === 16 && abi.offsets.l_pid === 24;
+function abiIsSupported(abi: FcntlAbi): boolean {
+  const observed = posixFcntlAbi();
+  return observed.alignment === 8 && observed.size === abi.size &&
+    (Object.keys(abi.offsets) as (keyof FlockValue)[]).every((name) => observed.offsets[name] === abi.offsets[name]);
 }
 
 function nativeFcntl(): Fcntl {
-  if (process.platform !== "linux" || process.arch !== "x64" || !abiIsSupported()) {
+  if (ABI === null || !abiIsSupported(ABI)) {
     throw new EvidenceContractError("commitLockUnsupported");
   }
   if (fcntlFunction !== null) return fcntlFunction;
   try {
-    const libc = koffi.load("libc.so.6");
+    const libc = koffi.load(ABI.library);
     fcntlFunction = libc.func(
       "fcntl",
       "int",
@@ -91,8 +124,9 @@ function nativeFcntl(): Fcntl {
 }
 
 function lockType(mode: CommitLockMode): number {
-  if (mode === "shared") return F_RDLCK;
-  if (mode === "exclusive") return F_WRLCK;
+  const abi = ABI ?? LINUX_ABI;
+  if (mode === "shared") return abi.F_RDLCK;
+  if (mode === "exclusive") return abi.F_WRLCK;
   throw new EvidenceContractError("commitLockModeInvalid");
 }
 
@@ -239,7 +273,7 @@ async function acquireLock(
   const value = lockValue(mode);
   while (true) {
     koffi.errno(0);
-    if (fcntl(descriptor, F_SETLK, value) === 0) return;
+    if (fcntl(descriptor, (ABI ?? LINUX_ABI).F_SETLK, value) === 0) return;
     const errno = koffi.errno();
     if (!retryableErrno(errno)) throw new EvidenceContractError("commitLockFailed");
     if (process.hrtime.bigint() >= deadline) throw new EvidenceContractError("commitLockTimeout");

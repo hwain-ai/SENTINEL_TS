@@ -28,11 +28,21 @@ kill 비율 %, 기본 100)으로 넘깁니다. 정수 또는 소수점 두 자�
 프로젝트의 테스트는 이 검사기의 잠긴 node_modules(Vitest 4.1.11)로 실행되므로, 대상 프로젝트가 다른
 런타임 의존성을 쓰면 아직 검사할 수 없습니다.
 
+## 지원 플랫폼과 준비
+
+Linux(x86_64, arm64)와 macOS(Intel, Apple Silicon)를 지원합니다. Windows 는 WSL2 안에서 씁니다.
+`scripts/toolchain.py`(표준 라이브러리만 쓰는 Python 실행기)가 플랫폼을 감지해 `toolchain.lock.json`의
+해당 항목(공식 주소·크기·SHA-256·실행 파일·설치 트리 지문)으로 Node 22.23.1 을 받고, `npm ci`로
+package-lock.json 의 의존성을 설치한 뒤 설치된 node_modules 트리 지문과 TypeScript 네이티브 실행 파일
+지문을 플랫폼별 잠금값과 대조합니다. `scripts/node.sh`·`scripts/npm.sh`·`scripts/bootstrap-node.sh`·
+`sentinel-tool/setup.sh`는 이 실행기로 넘기는 얇은 wrapper 입니다. 자식 프로세스는 상속 없는 최소
+환경(HOME·캐시는 `.toolchain` 아래, PATH 는 고정 Node 만)에서 돕니다.
+
 ## 현재 확인 방법
 
-1. `npm ci --ignore-scripts`로 lock file에 고정된 dependency를 설치합니다.
-2. `npm run build`로 TypeScript 7 compiler를 실행합니다.
-3. `npm test`로 Node 기본 test runner의 회귀 test를 실행합니다.
+1. `sentinel-tool/setup.sh`(또는 `python3 -I -B scripts/toolchain.py setup`)로 Node·의존성·빌드를 준비합니다.
+2. `scripts/node.sh --tool tsc -- -p tsconfig.json`(`npm run build`와 같음)으로 TypeScript 7 compiler를 실행합니다.
+3. `scripts/node.sh --test test/*.test.mjs`(`npm test`와 같음)로 Node 기본 test runner의 회귀 test를 실행합니다.
 
 TypeScript 7.0에는 안정된 compiler API가 없으므로 build에는 TypeScript 7.0.2를,
 AST 분석에는 npm alias로 exact 고정한 TypeScript 6.0.3 API를 직접 사용합니다. 자세한 이유는

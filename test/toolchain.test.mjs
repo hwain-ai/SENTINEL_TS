@@ -7,8 +7,10 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  realpath,
   rm,
   rmdir,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -27,10 +29,19 @@ after(async () => {
 });
 
 async function temporaryRoot(prefix) {
-  const root = await mkdtemp(join(tmpdir(), prefix));
+  // macOS temp directories live behind /private symlinks; keep the resolved form everywhere.
+  const root = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   temporaryRoots.push(root);
   return root;
 }
+
+// The launcher and the lock helper are Python; the wrappers use the same interpreter.
+const python = process.env.SENTINEL_PYTHON ?? "python3";
+const platformEntry = (lock) => {
+  const node = lock.toolchains.node;
+  const key = `${process.platform === "darwin" ? "darwin" : "linux"}-${process.arch === "arm64" ? "aarch64" : "x86_64"}`;
+  return { ...node, ...node.platforms[key], platform: key };
+};
 
 function run(executable, commandArguments = [], options = {}) {
   return spawnSync(executable, commandArguments, {
@@ -45,7 +56,7 @@ async function copyLauncherRepository() {
   const scripts = join(fixtureRoot, "scripts");
   await mkdir(scripts);
   await cp(join(repositoryRoot, "toolchain.lock.json"), join(fixtureRoot, "toolchain.lock.json"));
-  for (const name of ["bootstrap-node.sh", "node.sh", "npm.sh", "toolchain_lock.py"]) {
+  for (const name of ["bootstrap-node.sh", "node.sh", "npm.sh", "toolchain.py", "toolchain_lock.py"]) {
     await cp(join(repositoryRoot, "scripts", name), join(scripts, name));
   }
   return fixtureRoot;
@@ -171,7 +182,7 @@ async function writeIsolatedLockAddFixture() {
   await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
 
   const printTreeDigest = (tree) => {
-    const result = run("/usr/bin/python3", [
+    const result = run(python, [
       "-I",
       join(fixture, "scripts", "toolchain_lock.py"),
       lockPath,
@@ -202,9 +213,10 @@ test("pins the approved Node and bundled npm release", async () => {
   );
   assert.equal(packageDocument.engines.node, "22.23.1");
   assert.equal(
-    lock.toolchains.node.archiveSha256,
+    lock.toolchains.node.platforms["linux-x86_64"].archiveSha256,
     "9749e988f437343b7fa832c69ded82a312e41a03116d766797ac14f6f9eee578",
   );
+  const entry = platformEntry(lock);
   for (const key of [
     "archiveSize",
     "binarySha256",
@@ -214,8 +226,12 @@ test("pins the approved Node and bundled npm release", async () => {
     "packageLockSha256",
     "tscEntrySha256",
   ]) {
-    assert.ok(lock.toolchains.node[key], `missing locked field: ${key}`);
+    assert.ok(entry[key], `missing locked field: ${key}`);
   }
+  assert.deepEqual(
+    Object.keys(lock.toolchains.node.platforms).sort(),
+    ["darwin-aarch64", "darwin-x86_64", "linux-aarch64", "linux-x86_64"],
+  );
 });
 
 test("runs only the repository Node, bundled npm, and pinned TypeScript entry", () => {
@@ -272,16 +288,12 @@ test("runs only the exact locked StrykerJS package and entry", async () => {
   ]);
   assert.equal(version.status, 0, version.stderr);
   assert.equal(version.stdout.trim(), "10.0.0");
-  const scratchMode = run("/usr/bin/stat", [
-    "-c",
-    "%F:%a",
-    join(repositoryRoot, "node_modules", ".vite-temp"),
-  ]);
-  assert.equal(scratchMode.status, 0, scratchMode.stderr);
-  assert.equal(scratchMode.stdout.trim(), "directory:700");
+  const scratch = await stat(join(repositoryRoot, "node_modules", ".vite-temp"));
+  assert.ok(scratch.isDirectory());
+  assert.equal(scratch.mode & 0o777, 0o700);
 });
 
-test("pins the approved Koffi package and Linux x64 native dispatch", async () => {
+test("pins the approved Koffi package and its native package for every supported platform", async () => {
   const packageDocument = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
   const packageLock = JSON.parse(await readFile(join(repositoryRoot, "package-lock.json"), "utf8"));
   assert.equal(packageDocument.dependencies.koffi, "3.1.6");
@@ -295,27 +307,15 @@ test("pins the approved Koffi package and Linux x64 native dispatch", async () =
       version: "3.1.6",
     },
   );
-  assert.deepEqual(
-    {
-      integrity: packageLock.packages["node_modules/@koromix/koffi-linux-x64"].integrity,
-      version: packageLock.packages["node_modules/@koromix/koffi-linux-x64"].version,
-    },
-    {
-      integrity: "sha512-Xx5mpr9VcaMCXfvbqIiLIWIL9Iuu6F4r3iMXg7+zZCqYUFZPFwJgiDQBLxctHv2OYgIfAoaaHMW0GC1cJkHfbA==",
-      version: "3.1.6",
-    },
-  );
-  assert.equal(
-    await sha256(join(
-      repositoryRoot,
-      "node_modules",
-      "@koromix",
-      "koffi-linux-x64",
-      "linux_x64",
-      "koffi.node",
-    )),
-    "71a9865da872e6750e4b386611a325756b2947936df58ee8b54ef9a11b92abf0",
-  );
+  for (const native of ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]) {
+    const record = packageLock.packages[`node_modules/@koromix/koffi-${native}`];
+    assert.equal(record?.version, "3.1.6", native);
+    assert.match(record?.integrity ?? "", /^sha512-/u, native);
+  }
+  // The dependency tree fingerprint in the lock covers the installed native binary's bytes.
+  const installed = `${process.platform}-${process.arch}`;
+  const binary = await stat(join(repositoryRoot, "node_modules", "@koromix", `koffi-${installed}`, installed.replace("-", "_"), "koffi.node"));
+  assert.ok(binary.isFile());
 });
 
 test("runs the first-party CLI only from the exact locked dist tree", async () => {
@@ -325,7 +325,7 @@ test("runs the first-party CLI only from the exact locked dist tree", async () =
     entry: "dist/cli.js",
     entrySha256: "4d7b51cc09786d500a4e61282509c928b0b513c506f41e31df64d678d725ae85",
     tree: "dist",
-    treeSha256: "1ef0ae879825a8d21c9e80c82c0b4e050b2d6db0efbf234876841552283cb254",
+    treeSha256: "ab86a01f4e20588d48acff33dc6dbccb31d98195b754a20b8152d14e6ad50876",
   });
 
   const help = run(join(repositoryRoot, "scripts", "node.sh"), [
@@ -413,7 +413,7 @@ test("rejects duplicate lock keys and installed-tree symlink escapes", async () 
     '"repository": "SENTINEL_TS",\n  "repository": "SENTINEL_TS",',
   );
   await writeFile(lockPath, duplicateLock, "utf8");
-  const duplicate = run("/usr/bin/python3", [
+  const duplicate = run(python, [
     "-I",
     join(fixture, "scripts", "toolchain_lock.py"),
     lockPath,
@@ -426,7 +426,7 @@ test("rejects duplicate lock keys and installed-tree symlink escapes", async () 
   const tree = join(fixture, "tree");
   await mkdir(tree);
   await symlink("../outside", join(tree, "escape"));
-  const escaped = run("/usr/bin/python3", [
+  const escaped = run(python, [
     "-I",
     join(fixture, "scripts", "toolchain_lock.py"),
     join(repositoryRoot, "toolchain.lock.json"),
@@ -451,7 +451,7 @@ test("rejects version text that disagrees with the selected releases", async () 
     );
     await writeFile(lockPath, lock, "utf8");
 
-    const result = run("/usr/bin/python3", [
+    const result = run(python, [
       "-I",
       join(fixture, "scripts", "toolchain_lock.py"),
       lockPath,
@@ -473,7 +473,7 @@ test("rejects a malformed archive URL without a Python traceback", async () => {
     );
     await writeFile(lockPath, lock, "utf8");
 
-    const result = run("/usr/bin/python3", [
+    const result = run(python, [
       "-I",
       join(fixture, "scripts", "toolchain_lock.py"),
       lockPath,

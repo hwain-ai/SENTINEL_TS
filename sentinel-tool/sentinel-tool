@@ -50,8 +50,9 @@ def main() -> int:
     ):
         return finish(3)
     gate = request.get("gate") or {}
+    # The cross-platform launcher is Python; run it with this interpreter so no PATH lookup is involved.
     command = [
-        str(home / "scripts" / "node.sh"), "--entry", "sentinel-ts", "--",
+        sys.executable, "-I", "-B", str(home / "scripts" / "toolchain.py"), "node", "--entry", "sentinel-ts", "--",
         "check", "--project", request["projectRoot"],
     ]
     if request.get("config"):
