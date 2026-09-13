@@ -90,12 +90,12 @@ async function writeIsolatedLockAddFixture() {
   await writeFile(
     nodeBinary,
     [
-      "#!/bin/bash",
+      "#!/bin/sh",
       "set -eu",
-      "/usr/bin/printf '%s\\n' '{\"name\":\"fixture\",\"devDependencies\":{\"demo\":\"1.2.3\"}}' > package.json",
-      "/usr/bin/printf '%s\\n' '{\"name\":\"fixture\",\"lockfileVersion\":3,\"packages\":{\"\":{\"devDependencies\":{\"demo\":\"1.2.3\"}},\"node_modules/demo\":{\"version\":\"1.2.3\"}}}' > package-lock.json",
-      "/usr/bin/mkdir -p node_modules",
-      "/usr/bin/touch node_modules/npm-ran-here",
+      "printf '%s\\n' '{\"name\":\"fixture\",\"devDependencies\":{\"demo\":\"1.2.3\"}}' > package.json",
+      "printf '%s\\n' '{\"name\":\"fixture\",\"lockfileVersion\":3,\"packages\":{\"\":{\"devDependencies\":{\"demo\":\"1.2.3\"}},\"node_modules/demo\":{\"version\":\"1.2.3\"}}}' > package-lock.json",
+      "mkdir -p node_modules",
+      "touch node_modules/npm-ran-here",
       "",
     ].join("\n"),
     "utf8",
