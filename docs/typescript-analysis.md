@@ -16,7 +16,7 @@ TypeScript 6 호환 API를 사용합니다.
 
 ## 왜 두 version이 필요한가
 
-TypeScript 7.0.2는 Go로 새로 만든 native compiler입니다. 이 version의 `typescript`
+TypeScript 7.0.2는 native compiler입니다. 이 version의 `typescript`
 package root는 전체 compiler API를 제공하지 않습니다. Microsoft도 7.0에서 programmatic
 compiler API가 필요한 도구는 `@typescript/typescript6`를 함께 사용하도록 안내합니다.
 

@@ -35,8 +35,8 @@ def main() -> int:
     response = {key: request.get(key) for key in IDENTITY_KEYS}
     response["toolVersion"] = manifest["version"]
 
-    def finish(exit_code: int) -> int:
-        status = STATUS_BY_EXIT.get(exit_code, "backendError")
+    def finish(exit_code: int, *, no_changes: bool = False) -> int:
+        status = "noChanges" if no_changes else STATUS_BY_EXIT.get(exit_code, "backendError")
         exit_code = 6 if status == "backendError" else exit_code
         response.update(status=status, exitCode=exit_code, passed=status == "passed")
         sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
@@ -70,18 +70,28 @@ def main() -> int:
     for changed in request.get("changedFiles") or []:
         command += ["--changed-file", str(changed)]
     with tempfile.TemporaryDirectory(prefix="sentinel-tool-typescript-") as directory:
-        with open(Path(directory) / "checker.log", "wb") as log:
+        result_file = Path(directory) / "result.json"
+        with open(Path(directory) / "checker.log", "wb") as log, open(result_file, "wb") as output:
             try:
                 completed = subprocess.run(
                     command,
                     cwd=request["projectRoot"],
                     stdin=subprocess.DEVNULL,
-                    stdout=log,
+                    stdout=output,
                     stderr=log,
                     check=False,
                 )
             except OSError:
                 return finish(5)
+        if completed.returncode in (0, 2):
+            try:
+                result = json.loads(result_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return finish(6)
+            if not isinstance(result, dict) or result.get("pass") is not (completed.returncode == 0):
+                return finish(6)
+            if result.get("changedScope") == "empty":
+                return finish(0, no_changes=True) if completed.returncode == 0 and "changedFiles" in request else finish(6)
     return finish(completed.returncode)
 
 
