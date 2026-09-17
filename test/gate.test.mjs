@@ -48,6 +48,15 @@ test("golden CRAP cases pass or fail against the given limit", () => {
   }
 });
 
+test("default mutation minimum accepts 90 percent, rejects 89.99, and preserves explicit 100", () => {
+  for (const [killed, total, expected] of [[9, 10, true], [8999, 10000, false]]) {
+    const candidates = Array.from({ length: total }, (_, index) => ({ id: `mutant-${index}` }));
+    const outcomes = candidates.map(({ id }, index) => ({ id, status: index < killed ? "killed" : "survived" }));
+    assert.equal(evaluateMutationGate(candidates, outcomes, 0).pass, expected);
+    assert.equal(evaluateMutationGate(candidates, outcomes, 0, parseMutationMin("100")).pass, false);
+  }
+});
+
 test("golden mutation cases follow the minimum kill rate", () => {
   for (const item of golden.mutationCases) {
     const candidates = [];

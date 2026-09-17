@@ -19,7 +19,7 @@ module과 source digest의 callable에만 연결해 CRAP을 exact 분수로 계�
 `changedScope: empty`)로 응답하고 증거를 남기지 않습니다. `--input`과는 함께 쓸 수 없습니다.
 
 기준값은 `crap`, `mutation`, `check`의 `--crap-max`(CRAP 상한, 기본 8)와 `--mutation-min`(변이 최소
-kill 비율 %, 기본 100)으로 넘깁니다. 정수 또는 소수점 두 자리까지의 문자열이며 정확한 분수로 비교하고,
+kill 비율 %, 기본 90)으로 넘깁니다. 정수 또는 소수점 두 자리까지의 문자열이며 정확한 분수로 비교하고,
 증거 파일의 crap·mutation 구성요소에 판정에 쓴 crapMax·mutationMin을 함께 기록합니다.
 
 통합 SENTINEL 연결은 `sentinel-tool/` 폴더가 맡습니다. 어댑터가 도구 요청(표준입력 JSON)을 받아

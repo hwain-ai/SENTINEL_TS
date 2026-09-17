@@ -609,7 +609,7 @@ function threshold(value: unknown, parser: (text: unknown) => Threshold, code: s
   }
 }
 
-// At the default 100 percent this is exactly killed === inScope with every other state at zero.
+// At an explicit 100 percent this is exactly killed === inScope with every other state at zero.
 function mutationPassExpected(
   component: Record<string, unknown>,
   inScope: number,

@@ -187,7 +187,7 @@ test("check without --input measures fresh coverage CRAP and the project mutatio
   assert.equal(exitCode, 0, io.errors.join(""));
   const document = JSON.parse(io.output.join(""));
   assert.equal(document.pass, true);
-  assert.deepEqual(document.gate, { crapMax: "8", mutationMin: "100" });
+  assert.deepEqual(document.gate, { crapMax: "8", mutationMin: "90" });
   assert.equal(document.crap.rows.length, 1);
   assert.ok(document.crap.rows[0].id.startsWith("src/value.ts:"));
   assert.equal(document.crap.rows[0].pass, true);
@@ -200,7 +200,7 @@ test("check without --input measures fresh coverage CRAP and the project mutatio
   );
   assert.equal(evidence.components.crap.callableCount, 1);
   assert.equal(evidence.components.crap.crapMax, "8");
-  assert.equal(evidence.components.mutation.mutationMin, "100");
+  assert.equal(evidence.components.mutation.mutationMin, "90");
 
   const strictProject = await writeProject();
   const strictIo = dependencies(strictProject);

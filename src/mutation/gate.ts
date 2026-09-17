@@ -77,7 +77,7 @@ function requireExactResultSet(candidateIds: Set<string>, resultIds: Set<string>
   }
 }
 
-// At the default 100 percent this is exactly killed === inScope with every other state at zero.
+// At an explicit 100 percent this is exactly killed === inScope with every other state at zero.
 function mutationPassed(
   inScope: number,
   counts: Readonly<Record<MutationState, number>>,

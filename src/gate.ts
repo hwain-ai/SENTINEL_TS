@@ -7,7 +7,7 @@
 
 export const THRESHOLD_PATTERN = /^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/u;
 export const DEFAULT_CRAP_MAX = "8";
-export const DEFAULT_MUTATION_MIN = "100";
+export const DEFAULT_MUTATION_MIN = "90";
 
 export interface Threshold {
   readonly text: string;
