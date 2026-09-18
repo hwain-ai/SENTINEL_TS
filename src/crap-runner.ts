@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { attachCoverage, parseIstanbulStatements, type CallableMetric } from "./coverage.js";
 import { analyzeTypeScript } from "./crap.js";
+import { positionAt } from "./selection.js";
 import { DEFAULT_GATE, type Threshold } from "./gate.js";
 import { MutationProtocolError } from "./mutation/protocol.js";
 import type { MutationProject } from "./project.js";
@@ -41,6 +42,9 @@ function runVitest(vitest: string, snapshot: ProjectSnapshot): Promise<number | 
   const argv = [
     vitest,
     "run",
+    ...snapshot.testFiles,
+    "--testTimeout=0",
+    "--hookTimeout=0",
     ...(snapshot.vitestConfigFile === null ? [] : ["--config", snapshot.vitestConfigFile]),
     "--coverage.enabled=true",
     "--coverage.provider=v8",
@@ -107,7 +111,10 @@ async function measureSnapshot(snapshot: ProjectSnapshot, crapMax: Threshold): P
     const source = await readFile(path.join(snapshot.root, modulePath), "utf8");
     const callables = analyzeTypeScript(source, modulePath);
     const coverageFile = parseIstanbulStatements(document, modulePath, snapshot.root, source);
-    metrics.push(...attachCoverage(callables, coverageFile, crapMax));
+    const selected = snapshot.selectedCallables ?? [];
+    metrics.push(...attachCoverage(callables, coverageFile, crapMax)
+      .filter(item => !selected.length || selected.some(value => value.callableId === item.callableId))
+      .map(item => ({ ...item, line: positionAt(source, item.sourceRange.startByte).line })));
   }
   return { metrics };
 }

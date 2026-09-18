@@ -1,57 +1,51 @@
----
-type: Architecture Note
-status: stable
-generated: { by: process:codex, at: 2026-09-07T12:50:00Z }
-sources:
-  - resource: ../src/mutation/runtime.ts
-    title: 설치 진단 구현
-  - resource: ../test/runtime.test.mjs
-    title: 설치 진단 회귀 테스트
----
+# Stryker 실행과 설치 진단
 
-# Stryker 설치 진단
+SENTINEL_TS는 잠긴 Stryker·Vitest로 프로젝트 사본을 검사합니다. `doctor`는 설치 파일을 읽어 사용할 수 있는지 확인하고, mutation 실행도 이 확인을 통과한 뒤 시작합니다.
 
-doctor는 기대 버전을 출력하는 명령이 아니라, 실제 설치가 사용 가능한지 읽기 전용으로 확인하는 명령이다.
+## 설치 진단
 
-## 해결한 문제
+저장소 루트에서 실행합니다.
 
-기존 구현은 Stryker가 없어도 준비 완료를 뜻하는 ready와 고정 버전을 출력했다. 별도 임시 설치에서 Stryker만 제외한 CLI를 실행해 종료 코드 0을 확인했다. 회귀 테스트의 기대값은 설치 불가를 뜻하는 unavailable과 종료 코드 5다.
+```sh
+# 저장소 실행기로 잠긴 CLI의 설치 진단 호출
+scripts/node.sh --entry sentinel-ts -- doctor
+```
 
-## 실제 처리 순서
-
-1. toolchain.lock.json에서 승인 상태와 기대 버전을 읽는다. 저장소·Node·Stryker가 locked 상태여야 한다.
-2. 실행 중인 Node 버전, 해당 Node 배포의 npm package.json, 저장소의 Stryker core·Vitest runner package.json을 읽는다.
-3. 설치된 이름과 버전을 비교하고 Stryker CLI 파일의 SHA-256을 잠금 파일과 비교한다. SHA-256은 파일 내용이 바뀌었는지 확인하는 지문이다.
-4. 정상이면 ready와 종료 코드 0, 누락·불일치면 unavailable과 종료 코드 5를 반환한다. 설치가 없거나 메타데이터를 읽지 못한 패키지는 버전을 null로 표시한다. 다른 버전이 설치됐다면 기대 버전 대신 실제 버전을 표시한다.
-5. 실제 project mutation 실행도 같은 확인을 거친 뒤에만 소스 복사본을 만든다.
+검사기는 `toolchain.lock.json`의 기대 버전과 실제 Node·npm·Stryker core·Vitest runner 버전을 비교합니다. Stryker CLI 파일의 SHA-256도 대조합니다. 정상이면 `ready`와 종료 0, 누락·불일치면 `unavailable`과 종료 5를 반환합니다. 읽을 수 없는 버전은 `null`이며 실제로 다른 버전이 설치되어 있으면 그 값을 표시합니다.
 
 | 진단 코드 | 뜻 |
 |---|---|
-| runtimeLockInvalid | 잠금 파일이 없거나 승인 상태·정확한 버전·도구 식별자가 유효하지 않음 |
-| dependencyMissing | 필요한 파일이 없음 |
-| dependencyManifestInvalid | 설치 정보를 해석할 수 없거나 대상이 일반 파일이 아님 |
-| dependencyIdentityMismatch | 설치된 패키지 이름이 다름 |
-| dependencyVersionMismatch | 실행 환경이나 설치 버전이 잠금과 다름 |
-| dependencyArtifactMismatch | Stryker CLI 파일 내용이 잠금과 다름 |
+| `runtimeLockInvalid` | 잠금 파일의 승인 상태·버전·도구 식별자가 유효하지 않음 |
+| `dependencyMissing` | 필요한 파일이 없음 |
+| `dependencyManifestInvalid` | 설치 정보를 읽을 수 없거나 일반 파일이 아님 |
+| `dependencyIdentityMismatch` | 설치된 패키지 이름이 다름 |
+| `dependencyVersionMismatch` | 실제 버전이 잠금과 다름 |
+| `dependencyArtifactMismatch` | Stryker CLI 파일 지문이 잠금과 다름 |
 
-진단을 위해 npm·Stryker·프로젝트 설정을 실행하거나 대상 프로젝트에 파일을 만들지 않는다. 기존 출력 필드는 유지하고 diagnostics 목록을 추가했다.
+진단은 프로젝트 설정·npm·Stryker를 실행하지 않습니다. Node와 의존성 전체 트리의 무결성은 저장소 실행기와 잠금 검증기가 별도로 확인합니다. 현재 잠긴 저장소 설치 구조를 사용하며 임의의 전역 설치나 pnpm 구조를 탐색하지 않습니다.
 
-## 경계와 유지보수
+## 파일·함수·테스트 선택
 
-- 기대 버전은 이 모듈에 중복 작성하지 않고 toolchain.lock.json에서 읽는다.
-- 이 확인은 설치 사용 가능성을 위한 것이다. 전체 dependency tree·Node binary의 무결성 검증은 scripts/node.sh와 scripts/toolchain_lock.py가 계속 맡는다. 이 doctor를 독립적인 보안 인증으로 취급하지 않는다.
-- 현재 저장소 내부 node_modules와 승인 Node 배포 구조를 대상으로 한다. 임의의 전역 설치, pnpm 구조, npm 공개 배포 지원을 추가한 것은 아니다.
-- 새 backend 자동 다운로드, 사용자 프로젝트 설정 실행, 기존 backend 자동 교체는 하지 않는다.
-- 빌드 결과가 바뀌면 firstPartyTools의 CLI·dist 지문을 다시 계산한다. 외부 Stryker 버전과 dependency 잠금은 이번 변경에서 바꾸지 않았다.
+통합 `sentinel check --file ... --function ... --tests ...` 요청은 어댑터가 native 검사기에 전달합니다. 함수 선택은 소스 분석으로 확인한 callable의 범위를 사용합니다. 이름이 없거나 모호한 함수는 오류이며, 함수 이름에 `()`를 붙이지 않습니다.
 
-## 확인 방법과 근거
+Coverage는 전체 보고서와 소스 함수의 대응 관계를 먼저 확인한 뒤 선택한 함수만 CRAP 판정에 포함합니다. Mutation 실행기는 선택 파일과 함수의 위치 범위를 Stryker에 전달합니다. 보고서의 파일 목록은 Stryker 범위 표기에서 경로를 분리해 원래 기능 코드 목록과 대조하며, 설정의 실제 중복 파일은 오류입니다.
 
-SENTINEL_TS 폴더에서 scripts/node.sh --entry sentinel-ts -- doctor를 실행하면 설치 진단 JSON을 읽을 수 있다. scripts/node.sh는 승인 Node로 실행하는 저장소 명령이고, --entry sentinel-ts는 검증된 CLI를 선택하며, doctor는 진단 기능이다.
+`--tests`는 Vitest가 실행할 테스트 파일을 제한합니다. 생략하면 프로젝트 설정에서 찾은 테스트를 사용합니다. 측정할 코드 범위와 테스트 범위는 결과의 `scope`에 따로 기록합니다.
 
-- [runtime 회귀 테스트](../test/runtime.test.mjs): 실제 파일을 생성해 정상·누락·다른 버전·다른 이름·변경된 CLI·잘못된 잠금을 검사한다.
-- [CLI 설치 회귀 테스트](../test/doctor.test.mjs): Stryker 없는 별도 설치에서 종료 코드 5와 프로젝트 무변경을 확인한다.
-- [실제 mutation 테스트](../test/project-mutation.test.mjs): 고정 Stryker 실행과 typed assertion 증거가 기존처럼 동작하는지 확인한다.
+## 시간 제한과 변이 판정
 
-검증 명령은 scripts/node.sh --test test/*.test.mjs이며, --test는 테스트 실행, test/*.test.mjs는 해당 이름의 전체 테스트 파일이다. scripts/self-crap.sh는 실제 테스트 실행률과 코드 복잡도를 함께 점검한다.
+기본 검사에는 자동 실행 시간 제한이 없습니다. `stryker-unlimited.ts`가 Stryker의 실행 API를 호출하고 변이 실행의 시간 제한 처리를 해제합니다. Vitest의 테스트·hook 시간 제한도 0으로 설정합니다. 취소와 자식 프로세스 정리는 통합 실행기가 처리합니다. 설치된 외부 패키지 파일을 수정하는 방식은 아닙니다.
 
-2026-09-07 검증 결과: TypeScript 빌드 성공, 전체 Node 테스트 168개 통과·실패 0개, 자체 품질 검사의 Vitest 테스트 145개 통과. 분석한 함수·메서드 596개에서 CRAP 기준 초과와 계산 불가는 모두 0개이고 최대값은 허용 상한인 8이었다. 정상 설치의 doctor는 실제 버전과 빈 diagnostics를 반환했다. 전체 배포 승인이나 다른 언어의 backend 교체를 검증한 결과는 아니다.
+Stryker가 `killed`로 표시한 결과를 그대로 탐지 성공으로 세지 않습니다. 실행기가 정상 코드 대조와 변이 재실행의 테스트 목록·기대값 검사 실패를 확인합니다. 실행 오류는 `runtimeError`, 테스트가 변이 위치를 실행하지 않았으면 `uncovered`로 기록합니다. 모듈을 불러올 때 적용되는 변이는 환경을 다시 불러오기 전에 활성화합니다.
+
+`inScope`는 선택 범위의 변이 개수이고 `killed`는 테스트가 오류를 탐지한 개수입니다. 점수는 `killed / inScope × 100`입니다. `survived`, `uncovered`, 실행 오류 등도 분모에 남으며 탐지 성공으로 세지 않습니다. 변이가 0개면 점수를 100%로 만들지 않습니다. 세부 함수·파일 점수와 전체 명령 판정의 차이는 [결과 해석](https://github.com/hwain-ai/SENTINEL/blob/main/docs/results.md)에 있습니다.
+
+## 관련 코드와 검증
+
+- [runtime.ts](../src/mutation/runtime.ts): 설치 파일과 잠금 비교
+- [project-runner.ts](../src/mutation/project-runner.ts): 선택 범위, 실행과 결과 연결
+- [stryker-unlimited.ts](../src/mutation/stryker-unlimited.ts): 시간 제한 없는 Stryker 실행
+- [stryker-proof-runner.ts](../src/mutation/stryker-proof-runner.ts): 테스트 재실행과 탐지 증거
+- [설치 진단 시험](../test/runtime.test.mjs), [실제 변이 시험](../test/project-mutation.test.mjs), [범위 선택 시험](../test/selection.test.mjs)
+
+`scripts/node.sh --test test/*.test.mjs`로 검사기 시험을 실행합니다. 빌드 결과가 바뀌면 `toolchain.lock.json`의 firstPartyTools 지문도 실제 빌드와 맞춰야 합니다.

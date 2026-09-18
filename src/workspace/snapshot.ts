@@ -41,6 +41,7 @@ interface ProtectedIdentity {
 }
 
 export interface ProjectSnapshot {
+  readonly selectedCallables?: readonly import("../crap.js").CallableRecord[];
   readonly root: string;
   readonly productionFiles: readonly string[];
   readonly testFiles: readonly string[];
@@ -185,6 +186,7 @@ export async function withProjectSnapshot<T>(
       result = await action({
         root: snapshotRoot,
         productionFiles: project.productionFiles,
+        ...(project.selectedCallables === undefined ? {} : { selectedCallables: project.selectedCallables }),
         testFiles: project.testFiles,
         vitestConfigFile: project.vitestConfigFile,
         snapshotFiles: project.snapshotFiles,

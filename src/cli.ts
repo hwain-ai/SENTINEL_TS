@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { type CallableMetric } from "./coverage.js";
 import { computeCrap } from "./crap.js";
+import { selectProject, mutationOwners, type CodeSelection } from "./selection.js";
 import { collectProjectCrap, type ProjectCrapRun } from "./crap-runner.js";
 import { GateInputError, loadGate, type GateThresholds, type Threshold } from "./gate.js";
 import { EvidenceContractError } from "./evidence/contract.js";
@@ -47,6 +48,7 @@ interface CrapRowInput {
 }
 
 interface CrapAnalysis {
+  readonly unknownDetails?: readonly Readonly<Record<string, unknown>>[];
   readonly pass: boolean;
   readonly rows: readonly (ReturnType<typeof computeCrap> & { readonly id: string })[];
   readonly unknown: readonly string[];
@@ -92,7 +94,7 @@ function parseOptions(
   const result: Record<string, string | true> = {};
   for (let index = 0; index < values.length; index += 1) {
     const name = values[index];
-    requireKnownOption(name, valueNames, booleanNames);
+    requireKnownOption(name, [...valueNames, "--selection"], booleanNames);
     if (name in result) {
       throw new MutationProtocolError("invalidCliArguments", `duplicate command argument: ${name}`);
     }
@@ -124,13 +126,26 @@ function requireKnownOption(
 }
 
 const CHANGED_FILE = "--changed-file";
+const SELECTION_FIELDS: Readonly<Record<string, "files" | "functions" | "tests">> = { "--file": "files", "--function": "functions", "--tests": "tests" };
+
+function selectionValue(values: readonly string[], index: number): string {
+  const value = values[index];
+  if (value === undefined || value.startsWith("--")) throw new MutationProtocolError("invalidSelection", "selection requires a value");
+  return value;
+}
 
 // --changed-file repeats; it is split off before the single-value option parser runs.
 function splitChangedFiles(values: readonly string[]): { readonly changed: readonly string[]; readonly rest: readonly string[] } {
   const changed: string[] = [];
   const rest: string[] = [];
+  const selection: { files: string[]; functions: string[]; tests: string[] } = { files: [], functions: [], tests: [] };
   for (let index = 0; index < values.length; index += 1) {
     const name = values[index];
+    const field = SELECTION_FIELDS[name!];
+    if (field !== undefined) {
+      selection[field].push(selectionValue(values, ++index));
+      continue;
+    }
     if (name !== CHANGED_FILE) {
       rest.push(name as string);
       continue;
@@ -142,6 +157,7 @@ function splitChangedFiles(values: readonly string[]): { readonly changed: reado
     changed.push(value);
     index += 1;
   }
+  if (Object.values(selection).some(values => values.length)) rest.push("--selection", JSON.stringify(selection));
   return { changed, rest };
 }
 
@@ -177,10 +193,17 @@ function metricId(metric: CallableMetric): string {
 function projectCrapAnalysis(run: ProjectCrapRun): CrapAnalysis {
   const rows = run.metrics
     .filter((metric) => metric.crap !== null)
-    .map((metric) => ({ id: metricId(metric), ...(metric.crap as ReturnType<typeof computeCrap>) }));
+    .map((metric) => ({ id: metricId(metric), file: metric.modulePath, function: metric.qualifiedName,
+      sourceRange: metric.sourceRange, line: metric.line, complexity: metric.complexity, coverage: metric.coverage,
+      coverageBasis: "istanbul-statement", ...(metric.crap as ReturnType<typeof computeCrap>) }));
   const unknown = run.metrics.filter((metric) => metric.crap === null).map(metricId);
+  const unknownDetails = run.metrics.filter(metric => metric.crap === null).map(metric => ({
+    id: metricId(metric), file: metric.modulePath, function: metric.qualifiedName, line: metric.line,
+    sourceRange: metric.sourceRange, complexity: metric.complexity, reason: metric.unknownReason,
+    score: null, status: "coverageUnknown",
+  }));
   rows.sort((left, right) => Buffer.from(left.id).compare(Buffer.from(right.id)));
-  return { pass: rows.length > 0 && unknown.length === 0 && rows.every((row) => row.pass), rows, unknown };
+  return { pass: rows.length > 0 && unknown.length === 0 && rows.every((row) => row.pass), rows, unknown, unknownDetails };
 }
 
 function parseProof(value: unknown): TypedKillProof {
@@ -271,11 +294,12 @@ async function loadSelectedProject(
   const projectRoot = path.resolve(dependencies.cwd, selectedProject);
   const config = options["--config"];
   const module = options["--module"];
-  const loaded = await loadMutationProject(
+  let loaded = await loadMutationProject(
     projectRoot,
     typeof config === "string" ? config : undefined,
     typeof module === "string" ? module : undefined,
   );
+  if (typeof options["--selection"] === "string") loaded = await selectProject(loaded, JSON.parse(options["--selection"]) as CodeSelection);
   if (changed.length === 0) return { project: loaded, projectRoot };
   const project = restrictProject(loaded, changed);
   if (project === null) throw new EmptyChangedScope();
@@ -525,6 +549,7 @@ async function runMutation(arguments_: readonly string[], dependencies: CliDepen
 }
 
 interface CheckExecution {
+  readonly scope?: { readonly files: readonly string[]; readonly functions: readonly string[]; readonly tests: readonly string[] };
   readonly crap: CrapAnalysis;
   readonly mutation: MutationAnalysis;
   readonly projectRoot: string;
@@ -557,7 +582,9 @@ async function projectCheckExecution(
   const crap = projectCrapAnalysis(await collectProjectCrap(project, gate.crapMax));
   const collected = await collectProjectMutation(project);
   const mutation = analyzeMutationRecord(collected.run, collected.proofs, 0, gate.mutationMin);
-  return { crap, mutation, projectRoot };
+  const owners = await mutationOwners(project, collected.run.candidates);
+  const described = { ...mutation, normalized: mutation.normalized.map(item => ({ ...item, ...(owners.has(item.id) ? { function: owners.get(item.id) } : {}) })) };
+  return { crap, mutation: described, projectRoot, scope: { files: project.productionFiles, functions: (project.selectedCallables ?? []).map(item => item.qualifiedName), tests: project.testFiles } };
 }
 
 async function runCheck(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
@@ -591,7 +618,8 @@ async function runCheck(arguments_: readonly string[], dependencies: CliDependen
     pass,
     gate: { crapMax: gate.crapMax.text, mutationMin: gate.mutationMin.text },
     crap,
-    mutation: { gate: mutation.gate, results: mutation.normalized },
+    ...(execution.scope === undefined ? {} : { scope: execution.scope }),
+    mutation: { gate: mutation.gate, results: mutation.normalized.map(result => ({ ...mutation.run.candidates.find(candidate => candidate.id === result.id), ...result })) },
   });
   return pass ? 0 : 2;
 }
@@ -603,7 +631,12 @@ function writeCliFailure(error: unknown, dependencies: CliDependencies): number 
   const code = protocolError || evidenceError || gateError ? error.code : "internalError";
   const message = error instanceof Error ? error.message : String(error);
   writeJson(dependencies.writeError, { error: { code, message } });
+  return failureExitCode(gateError, protocolError, code);
+}
+
+function failureExitCode(gateError: boolean, protocolError: boolean, code: string): number {
   if (gateError) return 3;
+  if (["invalidSelection", "functionRequiresOneFile", "functionSelectionInvalid"].includes(code)) return 3;
   if (code === "strykerRuntimeUnavailable") return 5;
   return protocolError ? 6 : 7;
 }

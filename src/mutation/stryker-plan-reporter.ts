@@ -212,7 +212,10 @@ function parseFinalOutcomes(
 
 function parseReportedProductionFiles(report: JsonObject): readonly string[] {
   const config = requireObject(report.config, "invalidFinalReport", "mutation test config");
-  return reportedProductionInventory(config.mutate);
+  if (!Array.isArray(config.mutate)) return reportedProductionInventory(config.mutate);
+  if (new Set(config.mutate).size !== config.mutate.length) return reportedProductionInventory(config.mutate);
+  const files = config.mutate.map(value => typeof value === "string" ? value.replace(/:\d+:\d+-\d+:\d+$/u, "") : value);
+  return reportedProductionInventory([...new Set(files)]);
 }
 
 function requireCandidatesInsideProduction(

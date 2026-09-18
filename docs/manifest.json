@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "path": "README.md",
+      "summary": "TypeScript 검사기의 설치, 설정, 실행 명령과 결과"
+    },
+    {
+      "path": "docs/typescript-analysis.md",
+      "summary": "TypeScript 함수 분석, 복잡도와 커버리지 연결 규칙"
+    },
+    {
+      "path": "docs/stryker-runtime.md",
+      "summary": "Stryker 변이 수집·실행·결과 분류와 선택 범위"
+    },
+    {
+      "path": "docs/contributing.md",
+      "summary": "문서 색인·소스 연결표 관리, diff 검사와 push 훅 사용"
+    }
+  ],
+  "rules": [
+    {
+      "id": "checker",
+      "sources": [
+        "src/**",
+        "sentinel-tool/**",
+        "package.json",
+        "tsconfig*.json"
+      ],
+      "documents": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "analysis",
+      "sources": [
+        "src/crap*.ts",
+        "src/coverage.ts",
+        "src/source-text.ts"
+      ],
+      "documents": [
+        "docs/typescript-analysis.md"
+      ]
+    },
+    {
+      "id": "mutation",
+      "sources": [
+        "src/mutation/**"
+      ],
+      "documents": [
+        "docs/stryker-runtime.md"
+      ]
+    },
+    {
+      "id": "toolchain",
+      "sources": [
+        "scripts/toolchain.py",
+        "toolchain.lock.json",
+        "package-lock.json"
+      ],
+      "documents": [
+        "README.md",
+        "docs/stryker-runtime.md"
+      ]
+    },
+    {
+      "id": "documentation-checks",
+      "sources": [
+        "scripts/docs_lint.py",
+        "scripts/verify_repository.sh",
+        ".githooks/**",
+        ".github/workflows/**",
+        "docs/manifest.json",
+        "tests/test_docs_lint.py"
+      ],
+      "documents": [
+        "docs/contributing.md"
+      ]
+    }
+  ],
+  "ignoreDocuments": []
+}

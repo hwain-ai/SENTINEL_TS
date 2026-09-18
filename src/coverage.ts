@@ -46,6 +46,7 @@ export interface CoverageFileRecord {
 }
 
 export interface CallableMetric extends CallableRecord {
+  readonly line?: number;
   readonly coverage: { readonly covered: number; readonly total: number } | null;
   readonly crap: CrapValue | null;
   readonly unknownReason: "coverageFileMissing" | "coverageUnitsMissing" | null;

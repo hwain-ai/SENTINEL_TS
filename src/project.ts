@@ -37,6 +37,7 @@ interface RawModule {
 }
 
 export interface MutationProject {
+  readonly selectedCallables?: readonly import("./crap.js").CallableRecord[];
   readonly projectRoot: string;
   readonly moduleRoot: string;
   readonly moduleId: string;

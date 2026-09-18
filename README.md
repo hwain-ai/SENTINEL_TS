@@ -1,53 +1,47 @@
 # SENTINEL_TS
 
-## 역할
+TypeScript·TSX 함수의 복잡도와 Vitest 실행 범위로 CRAP을 계산하고, Stryker로 테스트의 오류 탐지율을 측정합니다. `sentinel-tool/`의 어댑터가 통합 SENTINEL 요청을 받아 결과 JSON을 반환합니다.
 
-SENTINEL_TS의 단일 책임은 TypeScript 프로젝트의 CRAP 계산과 mutation 결과를 하나의 품질 게이트로 판정하는 것입니다.
+## 검사 실행
 
-원격 저장소는 github.com/hwain-ai/SENTINEL_TS 입니다.
+[SENTINEL 설치 안내](https://github.com/hwain-ai/SENTINEL)를 따라 통합 명령을 준비한 뒤 검사할 프로젝트에서 실행합니다.
 
-TypeScript·TSX source를 AST로 분석해 함수, method, getter, setter, constructor, 함수 표현식,
-arrow function과 TSX callback을 각각 찾습니다. `check --project`는 검사 대상의 사본에서 잠긴
-Vitest로 coverage를 새로 만들고, Istanbul `coverage-final.json`의 function·statement range를 같은
-module과 source digest의 callable에만 연결해 CRAP을 exact 분수로 계산한 뒤, 같은 사본에서 Stryker
-변이 검사를 돌려 두 결과를 하나의 증거로 기록합니다. `--input`으로 미리 계산한 CRAP 행을 넘기는
-방식도 그대로 지원합니다.
+```sh
+# TypeScript 검사 도구와 프로젝트 설정 준비
+sentinel setup --language typescript
+# 기능 파일의 특정 함수를 지정한 테스트로 검사
+sentinel check --file src/pricing.ts --function calculateDiscount --tests test/pricing.test.ts
+# 프로젝트 설정의 기능 코드와 테스트 전체 검사
+sentinel check --all
+```
 
-변경분만 검사하려면 `--changed-file 경로`(프로젝트 기준 상대 경로, 반복 가능)를 `--project` 실행에 넘깁니다.
-생산 파일에 해당하는 경로만 CRAP 측정과 Stryker 변이 대상으로 남기고, 나머지 소스는 컴파일용 지원 파일로
-사본에 함께 둡니다. 넘긴 경로 중 생산 파일이 없으면 판정할 대상이 없으므로 검사 없이 통과(종료 0,
-`changedScope: empty`)로 응답하고 증거를 남기지 않습니다. `--input`과는 함께 쓸 수 없습니다.
+`--file`은 점수를 측정할 기능 파일, `--function`은 괄호 없는 함수 이름입니다. 함수를 생략하면 파일 전체를 측정합니다. `--tests`는 실행할 테스트 파일이며 여러 파일은 옵션을 반복합니다. 생략하면 설정된 테스트를 사용합니다. `--changed`는 Git 변경분의 기능 코드만 선택합니다. 테스트만 수정했으면 기능 파일을 직접 지정해 다시 검사합니다.
 
-기준값은 `crap`, `mutation`, `check`의 `--crap-max`(CRAP 상한, 기본 8)와 `--mutation-min`(변이 최소
-kill 비율 %, 기본 90)으로 넘깁니다. 정수 또는 소수점 두 자리까지의 문자열이며 정확한 분수로 비교하고,
-증거 파일의 crap·mutation 구성요소에 판정에 쓴 crapMax·mutationMin을 함께 기록합니다.
+기본 검사에는 자동 실행 시간 제한이 없습니다. Ctrl+C로 중단합니다. 특정 파일·함수·테스트 검사 결과는 전체 인증이 아닙니다. 점수와 `pass`·`certified`는 [결과 해석](https://github.com/hwain-ai/SENTINEL/blob/main/docs/results.md)에 설명되어 있습니다.
 
-통합 SENTINEL 연결은 `sentinel-tool/` 폴더가 맡습니다. 어댑터가 도구 요청(표준입력 JSON)을 받아
-`check --project`를 실행하고 응답 JSON 하나만 표준출력에 쓰며, `sentinel setup --language typescript`가
-`sentinel-tool/setup.sh`로 Node·의존성·빌드를 준비한 뒤 이 어댑터를 묶음으로 설치합니다. 검사 대상
-프로젝트의 테스트는 이 검사기의 잠긴 node_modules(Vitest 4.1.11)로 실행되므로, 대상 프로젝트가 다른
-런타임 의존성을 쓰면 아직 검사할 수 없습니다.
+## 프로젝트 설정과 제한
 
-## 지원 플랫폼과 준비
+설정의 `production`, `testRoots`·`testPatterns`, `excluded`로 기능 코드·테스트·제외 파일을 구분합니다. Vitest 설정이 없으면 기본값을 사용하며 `vite.config.*`도 지원합니다.
 
-Linux(x86_64, arm64)와 macOS(Intel, Apple Silicon)를 지원합니다. Windows 는 WSL2 안에서 씁니다.
-`scripts/toolchain.py`(표준 라이브러리만 쓰는 Python 실행기)가 플랫폼을 감지해 `toolchain.lock.json`의
-해당 항목(공식 주소·크기·SHA-256·실행 파일·설치 트리 지문)으로 Node 22.23.1 을 받고, `npm ci`로
-package-lock.json 의 의존성을 설치한 뒤 설치된 node_modules 트리 지문과 TypeScript 네이티브 실행 파일
-지문을 플랫폼별 잠금값과 대조합니다. `scripts/node.sh`·`scripts/npm.sh`·`scripts/bootstrap-node.sh`·
-`sentinel-tool/setup.sh`는 이 실행기로 넘기는 얇은 wrapper 입니다. 자식 프로세스는 상속 없는 최소
-환경(HOME·캐시는 `.toolchain` 아래, PATH 는 고정 Node 만)에서 돕니다.
+프로젝트 테스트는 검사기의 잠긴 `node_modules`로 실행합니다. 프로젝트에 필요한 다른 런타임 의존성을 자동으로 설치하거나 연결하지 않습니다. Coverage의 파일·위치·소스 지문이 함수와 맞지 않으면 오류 또는 미측정으로 표시합니다.
 
-## 현재 확인 방법
+CRAP 기본 상한은 8, mutation 최소 탐지율은 90%입니다. 테스트의 기대값 검사 실패를 증명한 변이만 `killed`로 셉니다. Stryker의 원래 상태와 SENTINEL의 판정이 다를 수 있습니다.
 
-1. `sentinel-tool/setup.sh`(또는 `python3 -I -B scripts/toolchain.py setup`)로 Node·의존성·빌드를 준비합니다.
-2. `scripts/node.sh --tool tsc -- -p tsconfig.json`(`npm run build`와 같음)으로 TypeScript 7 compiler를 실행합니다.
-3. `scripts/node.sh --test test/*.test.mjs`(`npm test`와 같음)로 Node 기본 test runner의 회귀 test를 실행합니다.
+Linux와 macOS의 x86_64·arm64를 지원하며 Windows는 WSL2에서 사용합니다.
 
-TypeScript 7.0에는 안정된 compiler API가 없으므로 build에는 TypeScript 7.0.2를,
-AST 분석에는 npm alias로 exact 고정한 TypeScript 6.0.3 API를 직접 사용합니다. 자세한 이유는
-[TypeScript 분석 구조](docs/typescript-analysis.md)에 있습니다.
+## 검사기 개발과 검증
 
-## 설계 근거
+`toolchain.lock.json`과 `package-lock.json`이 사용할 Node·패키지·빌드 결과를 고정합니다. 설치기는 파일 지문을 확인하고 실행기는 잠금과 다른 파일을 거부합니다.
 
-원본 작업공간 설계 문서: [2026-08-native-quality-tools.md](https://github.com/hwain-ai/SENTINEL/blob/main/docs/design-docs/2026-08-native-quality-tools.md) (SENTINEL 저장소)
+```sh
+# 고정 Node·의존성·빌드 준비
+sentinel-tool/setup.sh
+# 검사기 빌드
+scripts/node.sh --tool tsc -- -p tsconfig.json
+# 검사기 자체 시험
+scripts/node.sh --test test/*.test.mjs
+```
+
+빌드용 TypeScript와 소스 분석용 AST API의 역할은 [분석 구조](docs/typescript-analysis.md), 설치 진단과 오류 코드는 [Stryker 진단](docs/stryker-runtime.md)에 있습니다. 전체 목록은 [문서 목록](docs/index.md)을 참고합니다.
+
+통합 실행기에 연결하는 어댑터 버전은 `0.1.3`이다. [sentinel-tool/version](sentinel-tool/version)과 설치한 실행기의 승인 목록을 함께 확인한다. 기존 설치의 갱신은 [통합 실행기 갱신 안내](https://github.com/hwain-ai/SENTINEL#승인된-도구-버전-갱신)를 따른다.

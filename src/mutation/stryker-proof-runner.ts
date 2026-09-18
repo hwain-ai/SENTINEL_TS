@@ -177,6 +177,10 @@ export class SentinelVitestRunner {
 
   public async init(): Promise<void> {
     await this.delegate.init();
+    const context = contextOf(this.delegate);
+    if (context !== null) {
+      for (const project of context.projects) Object.assign(project.config, { testTimeout: 0, hookTimeout: 0 });
+    }
   }
 
   public async dryRun(options: unknown): Promise<DryRunResult> {

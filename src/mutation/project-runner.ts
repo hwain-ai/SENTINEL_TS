@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { positionAt } from "../selection.js";
 import { fileURLToPath } from "node:url";
 
 import type { MutationProject } from "../project.js";
@@ -92,6 +93,7 @@ async function executableConfig(snapshot: ProjectSnapshot, root: string): Promis
   );
   const configuration = {
     ...base,
+    mutate: await mutationPatterns(snapshot),
     allowConsoleColors: false,
     allowEmpty: false,
     cleanTempDir: "always",
@@ -118,6 +120,16 @@ async function executableConfig(snapshot: ProjectSnapshot, root: string): Promis
   const configPath = path.join(runtime, "stryker.config.json");
   await writeFile(configPath, `${JSON.stringify(configuration)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
   return configPath;
+}
+
+async function mutationPatterns(snapshot: ProjectSnapshot): Promise<readonly string[]> {
+  if (!snapshot.selectedCallables?.length) return snapshot.productionFiles;
+  return Promise.all(snapshot.selectedCallables.map(async callable => {
+    const source = await readFile(path.join(snapshot.root, callable.modulePath), "utf8");
+    const start = positionAt(source, callable.sourceRange.startByte);
+    const end = positionAt(source, callable.sourceRange.endByte);
+    return `${callable.modulePath}:${start.line}:${start.column - 1}-${end.line}:${end.column - 1}`;
+  }));
 }
 
 function runChild(executable: string, arguments_: readonly string[], cwd: string, proofDirectory: string): Promise<ChildResult> {
@@ -225,7 +237,7 @@ function collectedRun(stdout: string, productionFiles: readonly string[]): Colle
 async function executeSnapshot(snapshot: ProjectSnapshot): Promise<CollectedMutationRun> {
   const root = repositoryRoot();
   const stryker = await requireRegularFile(
-    path.join(root, "node_modules", "@stryker-mutator", "core", "bin", "stryker.js"),
+    path.join(root, "dist", "mutation", "stryker-unlimited.js"),
     "strykerExecutableInvalid",
   );
   const dependencies = await requireDependencyTree(root);
