@@ -13,7 +13,7 @@ async function fixture(t) {
   const original = JSON.parse(await readFile(new URL("../toolchain.lock.json", import.meta.url), "utf8"));
   const node = original.toolchains.node;
   const backend = node.packageTools.stryker;
-  const entry = "throw new Error('doctor must never execute backend code');\n";
+  const entry = "throw new Error('version must never execute backend code');\n";
   backend.entrySha256 = createHash("sha256").update(entry).digest("hex");
   const files = {
     "toolchain.lock.json": original,
@@ -30,7 +30,7 @@ async function fixture(t) {
   return { root, runtime: { version: node.version, executable: join(root, "runtime/bin/node") } };
 }
 
-test("doctor reads installed versions without executing packages or writing project state", async (t) => {
+test("version reads installed versions without executing packages or writing project state", async (t) => {
   const { root, runtime } = await fixture(t);
   const before = await readdir(root, { recursive: true });
   const result = await inspectStrykerRuntime(root, runtime);
@@ -70,7 +70,7 @@ test("matching version text does not hide changed backend entry bytes", async (t
   assert.ok(result.diagnostics.some((item) => item.code === "dependencyArtifactMismatch"));
 });
 
-test("doctor reports the actual unsupported Node version", async (t) => {
+test("version reports the actual unsupported Node version", async (t) => {
   const { root, runtime } = await fixture(t);
   const result = await inspectStrykerRuntime(root, { ...runtime, version: "20.0.0" });
   assert.equal(result.node, "20.0.0");

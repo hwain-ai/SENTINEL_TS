@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-test("installed CLI doctor rejects missing Stryker without creating project files", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "sentinel-doctor-install-"));
+test("installed CLI version rejects missing Stryker without creating project files", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "sentinel-version-install-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await cp(new URL("../dist", import.meta.url), join(root, "dist"), { recursive: true });
   await cp(new URL("../package.json", import.meta.url), join(root, "package.json"));
@@ -18,7 +18,7 @@ test("installed CLI doctor rejects missing Stryker without creating project file
       join(root, "node_modules", dependency), "dir");
   }
   const before = await readdir(root, { recursive: true });
-  const result = spawnSync(process.execPath, [join(root, "dist/cli.js"), "doctor"], {
+  const result = spawnSync(process.execPath, [join(root, "dist/cli.js"), "version"], {
     cwd: root, encoding: "utf8", env: { PATH: process.env.PATH },
   });
   assert.equal(result.status, 5, `${result.stdout}\n${result.stderr}`);

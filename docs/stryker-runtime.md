@@ -1,6 +1,6 @@
 # Stryker 실행과 설치 진단
 
-SENTINEL_TS는 잠긴 Stryker·Vitest로 프로젝트 사본을 검사합니다. `doctor`는 설치 파일을 읽어 사용할 수 있는지 확인하고, mutation 실행도 이 확인을 통과한 뒤 시작합니다.
+SENTINEL_TS는 잠긴 Stryker·Vitest로 프로젝트 사본을 검사합니다. `version`는 설치 파일을 읽어 사용할 수 있는지 확인하고, mutation 실행도 이 확인을 통과한 뒤 시작합니다.
 
 ## 설치 진단
 
@@ -8,7 +8,7 @@ SENTINEL_TS는 잠긴 Stryker·Vitest로 프로젝트 사본을 검사합니다.
 
 ```sh
 # 저장소 실행기로 잠긴 CLI의 설치 진단 호출
-scripts/node.sh --entry sentinel-ts -- doctor
+scripts/node.sh --entry sentinel-ts -- version
 ```
 
 검사기는 `toolchain.lock.json`의 기대 버전과 실제 Node·npm·Stryker core·Vitest runner 버전을 비교합니다. Stryker CLI 파일의 SHA-256도 대조합니다. 정상이면 `ready`와 종료 0, 누락·불일치면 `unavailable`과 종료 5를 반환합니다. 읽을 수 없는 버전은 `null`이며 실제로 다른 버전이 설치되어 있으면 그 값을 표시합니다.

@@ -82,7 +82,7 @@ test("help is side-effect free and lists all five commands", async () => {
   const exitCode = await runCli(["--help"], io.value);
 
   assert.equal(exitCode, 0);
-  assert.match(io.output.join(""), /crap.*mutation.*check.*doctor.*history/su);
+  assert.match(io.output.join(""), /crap.*mutation.*check.*version.*history/su);
   await assert.rejects(() => readdir(join(project, ".sentinel-ts")), /ENOENT/u);
 });
 
@@ -165,7 +165,7 @@ test("typed kill proof makes mutation pass while a protocol mismatch exits 6", a
   assert.equal(JSON.parse(mismatchIo.errors.join("")).error.code, "candidateResultSetMismatch");
 });
 
-test("crap, check, and doctor expose machine-readable vertical slices", async () => {
+test("crap, check, and version expose machine-readable vertical slices", async () => {
   const project = await mkdtemp(join(tmpdir(), "sentinel-ts-check-"));
   const crapRows = {
     rows: [
@@ -221,9 +221,9 @@ test("crap, check, and doctor expose machine-readable vertical slices", async ()
   assert.equal(recorded.components.mutation.mutationMin, "0");
   assert.equal(recorded.components.crap.crapMax, "8");
 
-  const doctorIo = dependencies(project, []);
-  assert.equal(await runCli(["doctor"], doctorIo.value), 0);
-  assert.deepEqual(JSON.parse(doctorIo.output.join("")), {
+  const versionIo = dependencies(project, []);
+  assert.equal(await runCli(["version"], versionIo.value), 0);
+  assert.deepEqual(JSON.parse(versionIo.output.join("")), {
     repository: "SENTINEL_TS",
     node: "22.23.1",
     npm: "10.9.8",

@@ -5,7 +5,7 @@ Replaces the Linux-only shell launchers. Runs on Linux and macOS (x86_64 and
 arm64) with the host's Python 3.9+ and the standard library only.
 
     scripts/toolchain.py bootstrap                     download, verify and install the locked Node
-    scripts/toolchain.py setup                         bootstrap, npm ci, build dist, doctor
+    scripts/toolchain.py setup                         bootstrap, npm ci, build dist, version
     scripts/toolchain.py node --version
     scripts/toolchain.py node --tool tsc|stryker -- ARGS...
     scripts/toolchain.py node --entry sentinel-ts -- ARGS...
@@ -565,9 +565,9 @@ def command_setup() -> int:
     for current, _directories, files in os.walk(dist):
         for name in files:
             os.chmod(Path(current) / name, 0o600)
-    doctor = subprocess.run([node, _first_party_entry(entry, "sentinel-ts"), "doctor"], cwd=str(REPOSITORY_ROOT), env=environment, stdout=subprocess.DEVNULL, check=False)
-    if doctor.returncode != 0:
-        raise fail("doctor failed")
+    version = subprocess.run([node, _first_party_entry(entry, "sentinel-ts"), "version"], cwd=str(REPOSITORY_ROOT), env=environment, stdout=subprocess.DEVNULL, check=False)
+    if version.returncode != 0:
+        raise fail("version failed")
     print("sentinel-tool: typescript checker ready", file=sys.stderr)
     return 0
 

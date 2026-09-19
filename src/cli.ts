@@ -30,7 +30,7 @@ import {
 } from "./mutation/protocol.js";
 import { SentinelPlanReporter } from "./mutation/stryker-plan-reporter.js";
 
-const HELP = "sentinel-ts commands: crap, mutation, check, doctor, history\n";
+const HELP = "sentinel-ts commands: crap, mutation, check, version, history\n";
 
 export interface CliDependencies {
   readonly cwd: string;
@@ -447,7 +447,7 @@ async function runCommand(
   arguments_: readonly string[],
   dependencies: CliDependencies,
 ): Promise<number> {
-  if (command === "doctor") return runDoctor(arguments_, dependencies);
+  if (command === "version") return runVersion(arguments_, dependencies);
   if (command === "history") return runHistory(arguments_, dependencies);
   if (command === "crap") return runCrap(arguments_, dependencies);
   if (command === "mutation") return runMutation(arguments_, dependencies);
@@ -455,9 +455,9 @@ async function runCommand(
   throw new MutationProtocolError("invalidCliArguments", `unknown command: ${command}`);
 }
 
-async function runDoctor(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
+async function runVersion(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
   if (arguments_.length !== 0) {
-    throw new MutationProtocolError("invalidCliArguments", "doctor accepts no arguments");
+    throw new MutationProtocolError("invalidCliArguments", "version accepts no arguments");
   }
   const inspection = await inspectStrykerRuntime();
   writeJson(dependencies.writeOut, inspection);

@@ -338,7 +338,7 @@ test("runs the first-party CLI only from the exact locked dist tree", async () =
     "--help",
   ]);
   assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /crap.*mutation.*check.*doctor.*history/su);
+  assert.match(help.stdout, /crap.*mutation.*check.*version.*history/su);
 });
 
 test("removes hostile runtime, loader, proxy, and npm configuration variables", async () => {
