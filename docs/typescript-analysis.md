@@ -1,5 +1,9 @@
 # TypeScript 분석 구조
 
+`check`는 기본으로 CRAP과 mutation을 병렬 실행하고 `--execution-mode sequential`이면 순차 실행합니다. CRAP은 원본의 로직을 유지한 임시 사본에서 Vitest를 실행한 뒤 복잡도와 커버리지를 결합합니다. 검사 전후 원본 파일의 지문을 비교하며, 두 결과가 모이기 전에 원본이 바뀌면 결과를 거부합니다.
+
+프로젝트 모듈의 기존 `node_modules` 패키지는 작업 사본에서 링크로 참조합니다. 일반 프로젝트 패키지는 설치된 버전을 유지하고, 측정용 Vitest·Vite·Stryker 패키지는 검사기에 고정된 버전을 사용합니다. 각 사본의 `node_modules` 폴더는 따로 만들어 캐시가 원본 프로젝트에 생기지 않도록 합니다. 패키지를 자동 설치하지는 않습니다.
+
 SENTINEL_TS는 project build에는 TypeScript 7을 쓰고, source AST 분석에는
 TypeScript 6 호환 API를 사용합니다.
 

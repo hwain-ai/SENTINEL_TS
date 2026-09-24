@@ -209,6 +209,30 @@ test("check without --input measures fresh coverage CRAP and the project mutatio
   assert.equal(JSON.parse(strictIo.output.join("")).crap.pass, false);
 });
 
+test("parallel and sequential checks use the project's own dependency with equal results", async () => {
+  const measurements = [];
+  for (const mode of ["parallel", "sequential"]) {
+    const project = await writeProject();
+    const library = join(project, "node_modules", "project-helper");
+    await mkdir(library, { recursive: true });
+    await writeFile(join(library, "package.json"), JSON.stringify({ name: "project-helper", type: "module", exports: "./index.js" }));
+    await writeFile(join(library, "index.js"), "export const even = 2; export const odd = 3;\n");
+    const testFile = join(project, "test", "value.test.ts");
+    await writeFile(testFile, 'import { even, odd } from "project-helper";\n' +
+      (await readFile(testFile, "utf8")).replace("isEven(2)", "isEven(even)").replace("isEven(3)", "isEven(odd)"));
+    const source = await readFile(join(project, "src/value.ts"), "utf8");
+    const io = dependencies(project);
+    const exit = await runCli(["check", "--project", project, "--execution-mode", mode], io.value);
+    assert.equal(exit, 0, io.errors.join(""));
+    const result = JSON.parse(io.output.join(""));
+    measurements.push([result.crap, result.mutation.gate]);
+    assert.equal(await readFile(join(project, "src/value.ts"), "utf8"), source);
+    assert.equal(await readFile(join(library, "index.js"), "utf8"), "export const even = 2; export const odd = 3;\n");
+    await assert.rejects(readdir(join(project, "node_modules/.vite")), /ENOENT/);
+  }
+  assert.deepEqual(measurements[0], measurements[1]);
+});
+
 test("does not count an actual mutant-triggered TypeError as killed", async () => {
   const project = await writeProject();
   await writeFile(

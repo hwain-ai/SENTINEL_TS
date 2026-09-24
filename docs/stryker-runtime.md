@@ -1,5 +1,9 @@
 # Stryker 실행과 설치 진단
 
+통합 `check`에서 CRAP과 mutation은 기본 병렬 실행이며, `--execution-mode sequential`로 순차 실행을 선택합니다. 각 측정 프로세스는 별도 프로세스 그룹을 사용합니다. 실행 오류나 취소 시 다른 측정의 테스트 작업도 중단하고 종료를 확인한 뒤 사본을 정리합니다. 점수 기준 미달은 실행 오류와 구분하여 두 결과를 모두 보고합니다.
+
+Mutation 사본은 프로젝트 모듈의 설치된 패키지와 검사기의 고정된 측정 도구를 링크로 연결합니다. 사본의 `node_modules` 폴더와 캐시 폴더를 따로 만들며, Stryker 내부 변이 작업 수는 기존 `concurrency: 1`을 유지합니다. CRAP과 mutation의 병렬 실행과 Stryker 내부의 변이 병렬 수는 별개입니다.
+
 SENTINEL_TS는 잠긴 Stryker·Vitest로 프로젝트 사본을 검사합니다. `version`는 설치 파일을 읽어 사용할 수 있는지 확인하고, mutation 실행도 이 확인을 통과한 뒤 시작합니다.
 
 ## 설치 진단

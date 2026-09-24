@@ -28,9 +28,9 @@
         "sentinel-ts": {
           "status": "locked",
           "entry": "dist/cli.js",
-          "entrySha256": "28b98bd9047062bdac7f91bae5b5da8fd3e4bf335e38d8ac430f923fdff20547",
+          "entrySha256": "433d3db96b3b5126b5cb439a4a93c11eb3d32994256c24f2f124c0faca233857",
           "tree": "dist",
-          "treeSha256": "ebc89e80100e6c4333385efd19e9ee1fe98f6f8fb3023b6e77e75224b2a367cd"
+          "treeSha256": "49c23e8ee6f8f2cb4c24e40015634d2a1e69bff86f1a35b007421ae7986fbfd6"
         }
       },
       "platforms": {

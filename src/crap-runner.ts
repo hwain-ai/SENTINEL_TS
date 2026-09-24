@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
-import { lstat, mkdir, readdir, readFile, realpath, symlink } from "node:fs/promises";
+import { runProcess } from "./workspace/process.js";
+import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
+import { linkDependencies } from "./workspace/dependencies.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,7 +39,7 @@ async function requireDependencyTree(root: string): Promise<string> {
   return realpath(dependencyRoot);
 }
 
-function runVitest(vitest: string, snapshot: ProjectSnapshot): Promise<number | null> {
+async function runVitest(vitest: string, snapshot: ProjectSnapshot, signal?: AbortSignal): Promise<number | null> {
   const argv = [
     vitest,
     "run",
@@ -52,50 +53,23 @@ function runVitest(vitest: string, snapshot: ProjectSnapshot): Promise<number | 
     `--coverage.reportsDirectory=${COVERAGE_DIRECTORY}`,
     ...snapshot.productionFiles.map((file) => `--coverage.include=${file}`),
   ];
-  return new Promise((resolve, reject) => {
-    execFile(
-      process.execPath,
-      argv,
-      {
-        cwd: snapshot.root,
-        encoding: "utf8",
-        env: {
+  const result = await runProcess(process.execPath, argv, snapshot.root, {
           HOME: process.env.HOME ?? snapshot.root,
           LANG: "C.UTF-8",
           LC_ALL: "C.UTF-8",
           PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
           XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? path.join(snapshot.root, ".sentinel-runtime", "cache"),
-        },
-        maxBuffer: 16 * 1024 * 1024,
-      },
-      (error) => {
-        if (error !== null && !("code" in error)) {
-          reject(error);
-          return;
-        }
-        resolve(error === null ? 0 : typeof error.code === "number" ? error.code : null);
-      },
-    );
-  });
+        }, signal);
+  return result.exitCode;
 }
 
-// The snapshot gets its own node_modules directory whose entries link to the
-// locked packages, so Vitest's cache (node_modules/.vite) lands in the snapshot
-// and the checker's locked dependency tree is never written.
-async function linkDependencies(dependencies: string, target: string): Promise<void> {
-  await mkdir(target, { mode: 0o700 });
-  for (const entry of await readdir(dependencies)) {
-    await symlink(path.join(dependencies, entry), path.join(target, entry));
-  }
-}
-
-async function measureSnapshot(snapshot: ProjectSnapshot, crapMax: Threshold): Promise<ProjectCrapRun> {
+async function measureSnapshot(snapshot: ProjectSnapshot, crapMax: Threshold, signal?: AbortSignal): Promise<ProjectCrapRun> {
   const root = repositoryRoot();
   const vitest = await requireRegularFile(path.join(root, "node_modules", "vitest", "vitest.mjs"), "vitestExecutableInvalid");
   const dependencies = await requireDependencyTree(root);
-  await linkDependencies(dependencies, path.join(snapshot.root, "node_modules"));
+  await linkDependencies(dependencies, path.join(snapshot.root, "node_modules"), snapshot.projectDependencies);
   await mkdir(path.join(snapshot.root, ".sentinel-runtime"), { mode: 0o700 });
-  const exitCode = await runVitest(vitest, snapshot);
+  const exitCode = await runVitest(vitest, snapshot, signal);
   if (exitCode !== 0) {
     throw new MutationProtocolError("coverageProcessFailed", `Vitest coverage run failed (exit=${String(exitCode)})`);
   }
@@ -124,6 +98,7 @@ async function measureSnapshot(snapshot: ProjectSnapshot, crapMax: Threshold): P
 export async function collectProjectCrap(
   project: MutationProject,
   crapMax: Threshold = DEFAULT_GATE.crapMax,
+  signal?: AbortSignal,
 ): Promise<ProjectCrapRun> {
-  return withProjectSnapshot(project, (snapshot) => measureSnapshot(snapshot, crapMax));
+  return withProjectSnapshot(project, (snapshot) => measureSnapshot(snapshot, crapMax, signal));
 }

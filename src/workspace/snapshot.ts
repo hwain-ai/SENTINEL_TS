@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { MutationProtocolError, compareUtf8 } from "../mutation/protocol.js";
 import type { MutationProject } from "../project.js";
+import { projectDependencyRoot } from "./dependencies.js";
 
 const OMITTED_DIRECTORIES = new Set([
   ".git",
@@ -41,6 +42,7 @@ interface ProtectedIdentity {
 }
 
 export interface ProjectSnapshot {
+  readonly projectDependencies?: string;
   readonly selectedCallables?: readonly import("../crap.js").CallableRecord[];
   readonly root: string;
   readonly productionFiles: readonly string[];
@@ -90,7 +92,7 @@ async function protectedIdentity(root: string, relative: string): Promise<Protec
   };
 }
 
-async function protectedInventory(project: MutationProject): Promise<readonly ProtectedIdentity[]> {
+export async function protectedInventory(project: MutationProject): Promise<readonly ProtectedIdentity[]> {
   const values = await Promise.all(
     project.protectedFiles.map((relative) => protectedIdentity(project.moduleRoot, relative)),
   );
@@ -110,7 +112,7 @@ function sameIdentity(left: ProtectedIdentity, right: ProtectedIdentity): boolea
   );
 }
 
-async function assertOriginalUnchanged(
+export async function assertOriginalUnchanged(
   project: MutationProject,
   expected: readonly ProtectedIdentity[],
 ): Promise<void> {
@@ -172,6 +174,7 @@ export async function withProjectSnapshot<T>(
   action: (snapshot: ProjectSnapshot) => Promise<T>,
 ): Promise<T> {
   const original = await protectedInventory(project);
+  const dependencies = await projectDependencyRoot(project.moduleRoot);
   // Vitest and Stryker report real paths; a snapshot under a symlinked temp root (macOS /var) must match them.
   const temporaryRoot = await realpath(await mkdtemp(path.join(tmpdir(), "sentinel-ts-snapshot-")));
   await chmod(temporaryRoot, 0o700);
@@ -185,6 +188,7 @@ export async function withProjectSnapshot<T>(
     try {
       result = await action({
         root: snapshotRoot,
+        ...(dependencies === undefined ? {} : { projectDependencies: dependencies }),
         productionFiles: project.productionFiles,
         ...(project.selectedCallables === undefined ? {} : { selectedCallables: project.selectedCallables }),
         testFiles: project.testFiles,

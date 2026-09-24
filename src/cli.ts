@@ -8,6 +8,8 @@ import { type CallableMetric } from "./coverage.js";
 import { computeCrap } from "./crap.js";
 import { selectProject, mutationOwners, type CodeSelection } from "./selection.js";
 import { collectProjectCrap, type ProjectCrapRun } from "./crap-runner.js";
+import { runPair } from "./workspace/process.js";
+import { protectedInventory, assertOriginalUnchanged } from "./workspace/snapshot.js";
 import { GateInputError, loadGate, type GateThresholds, type Threshold } from "./gate.js";
 import { EvidenceContractError } from "./evidence/contract.js";
 import {
@@ -577,19 +579,33 @@ async function projectCheckExecution(
   dependencies: CliDependencies,
   gate: GateThresholds,
   changed: readonly string[],
+  mode: "parallel" | "sequential",
 ): Promise<CheckExecution> {
   const { project, projectRoot } = await loadSelectedProject(options, dependencies, changed);
-  const crap = projectCrapAnalysis(await collectProjectCrap(project, gate.crapMax));
-  const collected = await collectProjectMutation(project);
+  const original = await protectedInventory(project);
+  const [measured, collected] = await runPair(
+    signal => collectProjectCrap(project, gate.crapMax, signal),
+    signal => collectProjectMutation(project, signal), mode,
+  ).finally(() => assertOriginalUnchanged(project, original));
+  const crap = projectCrapAnalysis(measured);
   const mutation = analyzeMutationRecord(collected.run, collected.proofs, 0, gate.mutationMin);
   const owners = await mutationOwners(project, collected.run.candidates);
   const described = { ...mutation, normalized: mutation.normalized.map(item => ({ ...item, ...(owners.has(item.id) ? { function: owners.get(item.id) } : {}) })) };
   return { crap, mutation: described, projectRoot, scope: { files: project.productionFiles, functions: (project.selectedCallables ?? []).map(item => item.qualifiedName), tests: project.testFiles } };
 }
 
+function executionMode(value: string | true | undefined): "parallel" | "sequential" {
+  const mode = value ?? "parallel";
+  if (mode !== "parallel" && mode !== "sequential") {
+    throw new MutationProtocolError("invalidExecutionMode", "execution mode must be parallel or sequential");
+  }
+  return mode;
+}
+
 async function runCheck(arguments_: readonly string[], dependencies: CliDependencies): Promise<number> {
   const { changed, rest } = splitChangedFiles(arguments_);
-  const options = parseOptions(rest, ["--input", "--project", "--config", "--module", "--crap-max", "--mutation-min"]);
+  const options = parseOptions(rest, ["--input", "--project", "--config", "--module", "--crap-max", "--mutation-min", "--execution-mode"]);
+  const mode = executionMode(options["--execution-mode"]);
   rejectChangedWithInput(options, changed);
   const gate = gateOptions(options);
   const inputPath = options["--input"];
@@ -597,7 +613,7 @@ async function runCheck(arguments_: readonly string[], dependencies: CliDependen
   try {
     execution = typeof inputPath === "string"
       ? await inputCheckExecution(inputPath, options, dependencies, gate)
-      : await projectCheckExecution(options, dependencies, gate, changed);
+      : await projectCheckExecution(options, dependencies, gate, changed, mode);
   } catch (error) {
     if (error instanceof EmptyChangedScope) return writeEmptyChangedScope("check", dependencies);
     throw error;
@@ -636,7 +652,8 @@ function writeCliFailure(error: unknown, dependencies: CliDependencies): number 
 
 function failureExitCode(gateError: boolean, protocolError: boolean, code: string): number {
   if (gateError) return 3;
-  if (["invalidSelection", "functionRequiresOneFile", "functionSelectionInvalid"].includes(code)) return 3;
+  if (["invalidSelection", "functionRequiresOneFile", "functionSelectionInvalid", "invalidExecutionMode"].includes(code)) return 3;
+  if (code === "checkCancelled") return 8;
   if (code === "strykerRuntimeUnavailable") return 5;
   return protocolError ? 6 : 7;
 }

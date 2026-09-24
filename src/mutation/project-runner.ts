@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
-import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { runProcess } from "../workspace/process.js";
+import { linkDependencies } from "../workspace/dependencies.js";
+import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { positionAt } from "../selection.js";
 import { fileURLToPath } from "node:url";
@@ -132,38 +133,15 @@ async function mutationPatterns(snapshot: ProjectSnapshot): Promise<readonly str
   }));
 }
 
-function runChild(executable: string, arguments_: readonly string[], cwd: string, proofDirectory: string): Promise<ChildResult> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      executable,
-      [...arguments_],
-      {
-        cwd,
-        encoding: "utf8",
-        env: {
+function runChild(executable: string, arguments_: readonly string[], cwd: string, proofDirectory: string, signal?: AbortSignal): Promise<ChildResult> {
+  return runProcess(executable, arguments_, cwd, {
           HOME: process.env.HOME ?? cwd,
           LANG: "C.UTF-8",
           LC_ALL: "C.UTF-8",
           PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
           SENTINEL_TS_PROOF_DIR: proofDirectory,
           XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? path.join(cwd, ".sentinel-runtime", "cache"),
-        },
-        maxBuffer: 16 * 1024 * 1024,
-      },
-      (error, stdout, stderr) => {
-        if (error !== null && !("code" in error)) {
-          reject(error);
-          return;
-        }
-        resolve({
-          exitCode: child.exitCode,
-          signal: child.signalCode,
-          stdout,
-          stderr,
-        });
-      },
-    );
-  });
+        }, signal);
 }
 
 function requireArray(value: unknown, label: string): readonly unknown[] {
@@ -234,18 +212,18 @@ function collectedRun(stdout: string, productionFiles: readonly string[]): Colle
   };
 }
 
-async function executeSnapshot(snapshot: ProjectSnapshot): Promise<CollectedMutationRun> {
+async function executeSnapshot(snapshot: ProjectSnapshot, signal?: AbortSignal): Promise<CollectedMutationRun> {
   const root = repositoryRoot();
   const stryker = await requireRegularFile(
     path.join(root, "dist", "mutation", "stryker-unlimited.js"),
     "strykerExecutableInvalid",
   );
   const dependencies = await requireDependencyTree(root);
-  await symlink(dependencies, path.join(snapshot.root, "node_modules"), "dir");
+  await linkDependencies(dependencies, path.join(snapshot.root, "node_modules"), snapshot.projectDependencies);
   const configPath = await executableConfig(snapshot, root);
   const proofDirectory = path.join(snapshot.root, ".sentinel-runtime", "proofs");
   await mkdir(proofDirectory, { mode: 0o700 });
-  const result = await runChild(process.execPath, [stryker, "run", configPath], snapshot.root, proofDirectory);
+  const result = await runChild(process.execPath, [stryker, "run", configPath], snapshot.root, proofDirectory, signal);
   if (result.exitCode !== 0 || result.signal !== null) {
     throw new MutationProtocolError(
       "strykerProcessFailed",
@@ -255,7 +233,7 @@ async function executeSnapshot(snapshot: ProjectSnapshot): Promise<CollectedMuta
   return collectedRun(result.stdout, snapshot.productionFiles);
 }
 
-export async function collectProjectMutation(project: MutationProject): Promise<CollectedMutationRun> {
+export async function collectProjectMutation(project: MutationProject, signal?: AbortSignal): Promise<CollectedMutationRun> {
   await requireStrykerRuntime();
-  return withProjectSnapshot(project, executeSnapshot);
+  return withProjectSnapshot(project, snapshot => executeSnapshot(snapshot, signal));
 }
