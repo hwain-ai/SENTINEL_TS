@@ -48,4 +48,4 @@ scripts/node.sh --test test/*.test.mjs
 
 빌드용 TypeScript와 소스 분석용 AST API의 역할은 [분석 구조](docs/typescript-analysis.md), 설치 진단과 오류 코드는 [Stryker 진단](docs/stryker-runtime.md)에 있습니다. 전체 목록은 [문서 목록](docs/index.md)을 참고합니다.
 
-통합 실행기에 연결하는 어댑터 버전은 `0.1.4`이다. [sentinel-tool/version](sentinel-tool/version)과 설치한 실행기의 승인 목록을 함께 확인한다. 기존 설치의 갱신은 [통합 실행기 갱신 안내](https://github.com/hwain-ai/SENTINEL#승인된-도구-버전-갱신)를 따른다.
+통합 실행기에 연결하는 어댑터 버전은 `0.1.5`이다. [sentinel-tool/version](sentinel-tool/version)과 설치한 실행기의 승인 목록을 함께 확인한다. 기존 설치의 갱신은 [통합 실행기 갱신 안내](https://github.com/hwain-ai/SENTINEL#승인된-도구-버전-갱신)를 따른다. 이 버전은 기본 병렬 실행과 `--execution-mode sequential` 선택을 지원한다.
